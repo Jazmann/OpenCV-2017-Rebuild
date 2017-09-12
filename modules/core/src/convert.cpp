@@ -648,9 +648,11 @@ void cv::mixChannels(InputArrayOfArrays src, InputOutputArrayOfArrays dst,
                ocl_mixChannels(src, dst, fromTo, npairs))
 
     bool src_is_mat = src.kind() != _InputArray::STD_VECTOR_MAT &&
+            src.kind() != _InputArray::STD_ARRAY_MAT &&
             src.kind() != _InputArray::STD_VECTOR_VECTOR &&
             src.kind() != _InputArray::STD_VECTOR_UMAT;
     bool dst_is_mat = dst.kind() != _InputArray::STD_VECTOR_MAT &&
+            dst.kind() != _InputArray::STD_ARRAY_MAT &&
             dst.kind() != _InputArray::STD_VECTOR_VECTOR &&
             dst.kind() != _InputArray::STD_VECTOR_UMAT;
     int i;
@@ -679,9 +681,11 @@ void cv::mixChannels(InputArrayOfArrays src, InputOutputArrayOfArrays dst,
                ocl_mixChannels(src, dst, &fromTo[0], fromTo.size()>>1))
 
     bool src_is_mat = src.kind() != _InputArray::STD_VECTOR_MAT &&
+            src.kind() != _InputArray::STD_ARRAY_MAT &&
             src.kind() != _InputArray::STD_VECTOR_VECTOR &&
             src.kind() != _InputArray::STD_VECTOR_UMAT;
     bool dst_is_mat = dst.kind() != _InputArray::STD_VECTOR_MAT &&
+            dst.kind() != _InputArray::STD_ARRAY_MAT &&
             dst.kind() != _InputArray::STD_VECTOR_VECTOR &&
             dst.kind() != _InputArray::STD_VECTOR_UMAT;
     int i;
@@ -4684,7 +4688,7 @@ static bool _openvx_cvt(const T* src, size_t sstep,
 
     try
     {
-        Context context = Context::create();
+        Context context = ovx::getOpenVXContext();
 
         // Other conversions are marked as "experimental"
         if(context.vendorID() == VX_ID_KHRONOS &&
@@ -5613,7 +5617,7 @@ static bool openvx_LUT(Mat src, Mat dst, Mat _lut)
 
     try
     {
-        ivx::Context ctx = ivx::Context::create();
+        ivx::Context ctx = ovx::getOpenVXContext();
 
         ivx::Image
             ia = ivx::Image::createFromHandle(ctx, VX_DF_IMAGE_U8,
@@ -5719,7 +5723,7 @@ public:
 
         size_t elemSize1 = dst.elemSize1();
         CV_DbgAssert(elemSize1 == 1);
-        lutBuffer = (uchar*)ippMalloc(256 * (int)elemSize1 * 4);
+        lutBuffer = (uchar*)CV_IPP_MALLOC(256 * (int)elemSize1 * 4);
         lutTable[0] = lutBuffer + 0;
         lutTable[1] = lutBuffer + 1 * 256 * elemSize1;
         lutTable[2] = lutBuffer + 2 * 256 * elemSize1;
