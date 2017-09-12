@@ -417,6 +417,308 @@ private:
     resizeNNInvoker& operator=(const resizeNNInvoker&);
 };
 
+#if CV_AVX2
+class resizeNNInvokerAVX4 :
+    public ParallelLoopBody
+{
+public:
+    resizeNNInvokerAVX4(const Mat& _src, Mat &_dst, int *_x_ofs, int _pix_size4, double _ify) :
+        ParallelLoopBody(), src(_src), dst(_dst), x_ofs(_x_ofs), pix_size4(_pix_size4),
+        ify(_ify)
+    {
+    }
+
+#if defined(__INTEL_COMPILER)
+#pragma optimization_parameter target_arch=AVX
+#endif
+    virtual void operator() (const Range& range) const
+    {
+        Size ssize = src.size(), dsize = dst.size();
+        int y, x, pix_size = (int)src.elemSize();
+        int width = dsize.width;
+        int avxWidth = width - (width & 0x7);
+        const __m256i CV_DECL_ALIGNED(64) mask = _mm256_set1_epi32(-1);
+        if(((int64)(dst.data + dst.step) & 0x1f) == 0)
+        {
+            for(y = range.start; y < range.end; y++)
+            {
+                uchar* D = dst.data + dst.step*y;
+                uchar* Dstart = D;
+                int sy = std::min(cvFloor(y*ify), ssize.height-1);
+                const uchar* S = src.data + sy*src.step;
+#pragma unroll(4)
+                for(x = 0; x < avxWidth; x += 8)
+                {
+                    const __m256i CV_DECL_ALIGNED(64) *addr = (__m256i*)(x_ofs + x);
+                    __m256i CV_DECL_ALIGNED(64) indices = _mm256_lddqu_si256(addr);
+                    __m256i CV_DECL_ALIGNED(64) pixels = _mm256_i32gather_epi32((const int*)S, indices, 1);
+                    _mm256_maskstore_epi32((int*)D, mask, pixels);
+                    D += 32;
+                }
+                for(; x < width; x++)
+                {
+                    *(int*)(Dstart + x*4) = *(int*)(S + x_ofs[x]);
+                }
+            }
+        }
+        else
+        {
+            for(y = range.start; y < range.end; y++)
+            {
+                uchar* D = dst.data + dst.step*y;
+                uchar* Dstart = D;
+                int sy = std::min(cvFloor(y*ify), ssize.height-1);
+                const uchar* S = src.data + sy*src.step;
+#pragma unroll(4)
+                for(x = 0; x < avxWidth; x += 8)
+                {
+                    const __m256i CV_DECL_ALIGNED(64) *addr = (__m256i*)(x_ofs + x);
+                    __m256i CV_DECL_ALIGNED(64) indices = _mm256_lddqu_si256(addr);
+                    __m256i CV_DECL_ALIGNED(64) pixels = _mm256_i32gather_epi32((const int*)S, indices, 1);
+                    _mm256_storeu_si256((__m256i*)D, pixels);
+                    D += 32;
+                }
+                for(; x < width; x++)
+                {
+                    *(int*)(Dstart + x*4) = *(int*)(S + x_ofs[x]);
+                }
+            }
+        }
+    }
+
+private:
+    const Mat src;
+    Mat dst;
+    int* x_ofs, pix_size4;
+    double ify;
+
+    resizeNNInvokerAVX4(const resizeNNInvokerAVX4&);
+    resizeNNInvokerAVX4& operator=(const resizeNNInvokerAVX4&);
+};
+
+class resizeNNInvokerAVX2 :
+    public ParallelLoopBody
+{
+public:
+    resizeNNInvokerAVX2(const Mat& _src, Mat &_dst, int *_x_ofs, int _pix_size4, double _ify) :
+        ParallelLoopBody(), src(_src), dst(_dst), x_ofs(_x_ofs), pix_size4(_pix_size4),
+        ify(_ify)
+    {
+    }
+
+#if defined(__INTEL_COMPILER)
+#pragma optimization_parameter target_arch=AVX
+#endif
+    virtual void operator() (const Range& range) const
+    {
+        Size ssize = src.size(), dsize = dst.size();
+        int y, x, pix_size = (int)src.elemSize();
+        int width = dsize.width;
+        //int avxWidth = (width - 1) - ((width - 1) & 0x7);
+        int avxWidth = width - (width & 0xf);
+        const __m256i CV_DECL_ALIGNED(64) mask = _mm256_set1_epi32(-1);
+        const __m256i CV_DECL_ALIGNED(64) shuffle_mask = _mm256_set_epi8(15,14,11,10,13,12,9,8,7,6,3,2,5,4,1,0,
+                                                                         15,14,11,10,13,12,9,8,7,6,3,2,5,4,1,0);
+        const __m256i CV_DECL_ALIGNED(64) permute_mask = _mm256_set_epi32(7, 5, 3, 1, 6, 4, 2, 0);
+        const __m256i CV_DECL_ALIGNED(64) shift_shuffle_mask = _mm256_set_epi8(13,12,15,14,9,8,11,10,5,4,7,6,1,0,3,2,
+                                                                               13,12,15,14,9,8,11,10,5,4,7,6,1,0,3,2);
+        if(((int64)(dst.data + dst.step) & 0x1f) == 0)
+        {
+            for(y = range.start; y < range.end; y++)
+            {
+                uchar* D = dst.data + dst.step*y;
+                uchar* Dstart = D;
+                int sy = std::min(cvFloor(y*ify), ssize.height-1);
+                const uchar* S = src.data + sy*src.step;
+                const uchar* S2 = S - 2;
+#pragma unroll(4)
+                for(x = 0; x < avxWidth; x += 16)
+                {
+                    const __m256i CV_DECL_ALIGNED(64) *addr = (__m256i*)(x_ofs + x);
+                    __m256i CV_DECL_ALIGNED(64) indices = _mm256_lddqu_si256(addr);
+                    __m256i CV_DECL_ALIGNED(64) pixels1 = _mm256_i32gather_epi32((const int*)S, indices, 1);
+                    const __m256i CV_DECL_ALIGNED(64) *addr2 = (__m256i*)(x_ofs + x + 8);
+                    __m256i CV_DECL_ALIGNED(64) indices2 = _mm256_lddqu_si256(addr2);
+                    __m256i CV_DECL_ALIGNED(64) pixels2 = _mm256_i32gather_epi32((const int*)S2, indices2, 1);
+                    __m256i CV_DECL_ALIGNED(64) unpacked = _mm256_blend_epi16(pixels1, pixels2, 0xaa);
+
+                    __m256i CV_DECL_ALIGNED(64) bytes_shuffled = _mm256_shuffle_epi8(unpacked, shuffle_mask);
+                    __m256i CV_DECL_ALIGNED(64) ints_permuted = _mm256_permutevar8x32_epi32(bytes_shuffled, permute_mask);
+                    _mm256_maskstore_epi32((int*)D, mask, ints_permuted);
+                    D += 32;
+                }
+                for(; x < width; x++)
+                {
+                    *(ushort*)(Dstart + x*2) = *(ushort*)(S + x_ofs[x]);
+                }
+
+            }
+        }
+        else
+        {
+            for(y = range.start; y < range.end; y++)
+            {
+                uchar* D = dst.data + dst.step*y;
+                uchar* Dstart = D;
+                int sy = std::min(cvFloor(y*ify), ssize.height-1);
+                const uchar* S = src.data + sy*src.step;
+                const uchar* S2 = S - 2;
+#pragma unroll(4)
+                for(x = 0; x < avxWidth; x += 16)
+                {
+                    const __m256i CV_DECL_ALIGNED(64) *addr = (__m256i*)(x_ofs + x);
+                    __m256i CV_DECL_ALIGNED(64) indices = _mm256_lddqu_si256(addr);
+                    __m256i CV_DECL_ALIGNED(64) pixels1 = _mm256_i32gather_epi32((const int*)S, indices, 1);
+                    const __m256i CV_DECL_ALIGNED(64) *addr2 = (__m256i*)(x_ofs + x + 8);
+                    __m256i CV_DECL_ALIGNED(64) indices2 = _mm256_lddqu_si256(addr2);
+                    __m256i CV_DECL_ALIGNED(64) pixels2 = _mm256_i32gather_epi32((const int*)S2, indices2, 1);
+                    __m256i CV_DECL_ALIGNED(64) unpacked = _mm256_blend_epi16(pixels1, pixels2, 0xaa);
+
+                    __m256i CV_DECL_ALIGNED(64) bytes_shuffled = _mm256_shuffle_epi8(unpacked, shuffle_mask);
+                    __m256i CV_DECL_ALIGNED(64) ints_permuted = _mm256_permutevar8x32_epi32(bytes_shuffled, permute_mask);
+                    _mm256_storeu_si256((__m256i*)D, ints_permuted);
+                    D += 32;
+                }
+                for(; x < width; x++)
+                {
+                    *(ushort*)(Dstart + x*2) = *(ushort*)(S + x_ofs[x]);
+                }
+            }
+        }
+    }
+
+private:
+    const Mat src;
+    Mat dst;
+    int* x_ofs, pix_size4;
+    double ify;
+
+    resizeNNInvokerAVX2(const resizeNNInvokerAVX2&);
+    resizeNNInvokerAVX2& operator=(const resizeNNInvokerAVX2&);
+};
+#endif
+
+#if CV_SSE4_1
+class resizeNNInvokerSSE2 :
+    public ParallelLoopBody
+{
+public:
+    resizeNNInvokerSSE2(const Mat& _src, Mat &_dst, int *_x_ofs, int _pix_size4, double _ify) :
+        ParallelLoopBody(), src(_src), dst(_dst), x_ofs(_x_ofs), pix_size4(_pix_size4),
+        ify(_ify)
+    {
+    }
+
+#if defined(__INTEL_COMPILER)
+#pragma optimization_parameter target_arch=SSE4.2
+#endif
+    virtual void operator() (const Range& range) const
+    {
+        Size ssize = src.size(), dsize = dst.size();
+        int y, x;
+        int width = dsize.width;
+        int sseWidth = width - (width & 0x7);
+        for(y = range.start; y < range.end; y++)
+        {
+            uchar* D = dst.data + dst.step*y;
+            uchar* Dstart = D;
+            int sy = std::min(cvFloor(y*ify), ssize.height-1);
+            const uchar* S = src.data + sy*src.step;
+            __m128i CV_DECL_ALIGNED(64) pixels = _mm_set1_epi16(0);
+            for(x = 0; x < sseWidth; x += 8)
+            {
+                ushort imm = *(ushort*)(S + x_ofs[x + 0]);
+                pixels = _mm_insert_epi16(pixels, imm, 0);
+                imm = *(ushort*)(S + x_ofs[x + 1]);
+                pixels = _mm_insert_epi16(pixels, imm, 1);
+                imm = *(ushort*)(S + x_ofs[x + 2]);
+                pixels = _mm_insert_epi16(pixels, imm, 2);
+                imm = *(ushort*)(S + x_ofs[x + 3]);
+                pixels = _mm_insert_epi16(pixels, imm, 3);
+                imm = *(ushort*)(S + x_ofs[x + 4]);
+                pixels = _mm_insert_epi16(pixels, imm, 4);
+                imm = *(ushort*)(S + x_ofs[x + 5]);
+                pixels = _mm_insert_epi16(pixels, imm, 5);
+                imm = *(ushort*)(S + x_ofs[x + 6]);
+                pixels = _mm_insert_epi16(pixels, imm, 6);
+                imm = *(ushort*)(S + x_ofs[x + 7]);
+                pixels = _mm_insert_epi16(pixels, imm, 7);
+                _mm_storeu_si128((__m128i*)D, pixels);
+                D += 16;
+            }
+            for(; x < width; x++)
+            {
+                *(ushort*)(Dstart + x*2) = *(ushort*)(S + x_ofs[x]);
+            }
+        }
+    }
+
+private:
+    const Mat src;
+    Mat dst;
+    int* x_ofs, pix_size4;
+    double ify;
+
+    resizeNNInvokerSSE2(const resizeNNInvokerSSE2&);
+    resizeNNInvokerSSE2& operator=(const resizeNNInvokerSSE2&);
+};
+
+class resizeNNInvokerSSE4 :
+    public ParallelLoopBody
+{
+public:
+    resizeNNInvokerSSE4(const Mat& _src, Mat &_dst, int *_x_ofs, int _pix_size4, double _ify) :
+        ParallelLoopBody(), src(_src), dst(_dst), x_ofs(_x_ofs), pix_size4(_pix_size4),
+        ify(_ify)
+    {
+    }
+#if defined(__INTEL_COMPILER)
+#pragma optimization_parameter target_arch=SSE4.2
+#endif
+    virtual void operator() (const Range& range) const
+    {
+        Size ssize = src.size(), dsize = dst.size();
+        int y, x;
+        int width = dsize.width;
+        int sseWidth = width - (width & 0x3);
+        for(y = range.start; y < range.end; y++)
+        {
+            uchar* D = dst.data + dst.step*y;
+            uchar* Dstart = D;
+            int sy = std::min(cvFloor(y*ify), ssize.height-1);
+            const uchar* S = src.data + sy*src.step;
+            __m128i CV_DECL_ALIGNED(64) pixels = _mm_set1_epi16(0);
+            for(x = 0; x < sseWidth; x += 4)
+            {
+                int imm = *(int*)(S + x_ofs[x + 0]);
+                pixels = _mm_insert_epi32(pixels, imm, 0);
+                imm = *(int*)(S + x_ofs[x + 1]);
+                pixels = _mm_insert_epi32(pixels, imm, 1);
+                imm = *(int*)(S + x_ofs[x + 2]);
+                pixels = _mm_insert_epi32(pixels, imm, 2);
+                imm = *(int*)(S + x_ofs[x + 3]);
+                pixels = _mm_insert_epi32(pixels, imm, 3);
+                _mm_storeu_si128((__m128i*)D, pixels);
+                D += 16;
+            }
+            for(; x < width; x++)
+            {
+                *(int*)(Dstart + x*4) = *(int*)(S + x_ofs[x]);
+            }
+        }
+    }
+
+private:
+    const Mat src;
+    Mat dst;
+    int* x_ofs, pix_size4;
+    double ify;
+
+    resizeNNInvokerSSE4(const resizeNNInvokerSSE4&);
+    resizeNNInvokerSSE4& operator=(const resizeNNInvokerSSE4&);
+};
+#endif
+
 static void
 resizeNN( const Mat& src, Mat& dst, double fx, double fy )
 {
@@ -435,8 +737,42 @@ resizeNN( const Mat& src, Mat& dst, double fx, double fy )
     }
 
     Range range(0, dsize.height);
-    resizeNNInvoker invoker(src, dst, x_ofs, pix_size4, ify);
-    parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+#if CV_AVX2
+    if(checkHardwareSupport(CV_CPU_AVX2) && ((pix_size == 2) || (pix_size == 4)))
+    {
+        if(pix_size == 2)
+        {
+            resizeNNInvokerAVX2 invoker(src, dst, x_ofs, pix_size4, ify);
+            parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+        }
+        else if (pix_size == 4)
+        {
+            resizeNNInvokerAVX4 invoker(src, dst, x_ofs, pix_size4, ify);
+            parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+        }
+    }
+    else
+#endif
+#if CV_SSE4_1
+    if(checkHardwareSupport(CV_CPU_SSE4_1) && ((pix_size == 2) || (pix_size == 4)))
+    {
+        if(pix_size == 2)
+        {
+            resizeNNInvokerSSE2 invoker(src, dst, x_ofs, pix_size4, ify);
+            parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+        }
+        else if(pix_size == 4)
+        {
+            resizeNNInvokerSSE4 invoker(src, dst, x_ofs, pix_size4, ify);
+            parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+        }
+    }
+    else
+#endif
+    {
+        resizeNNInvoker invoker(src, dst, x_ofs, pix_size4, ify);
+        parallel_for_(range, invoker, dst.total()/(double)(1<<16));
+    }
 }
 
 
@@ -4946,6 +5282,7 @@ void cv::remap( InputArray _src, OutputArray _dst,
 
     CV_OVX_RUN(
         src.type() == CV_8UC1 && dst.type() == CV_8UC1 &&
+        !ovx::skipSmallImages<VX_KERNEL_REMAP>(src.cols, src.rows) &&
         (borderType& ~BORDER_ISOLATED) == BORDER_CONSTANT &&
         ((map1.type() == CV_32FC2 && map2.empty() && map1.size == dst.size) ||
          (map1.type() == CV_32FC1 && map2.type() == CV_32FC1 && map1.size == dst.size && map2.size == dst.size) ||
@@ -5019,10 +5356,14 @@ void cv::remap( InputArray _src, OutputArray _dst,
     {
         if( interpolation == INTER_LINEAR )
             ifunc = linear_tab[depth];
-        else if( interpolation == INTER_CUBIC )
+        else if( interpolation == INTER_CUBIC ){
             ifunc = cubic_tab[depth];
-        else if( interpolation == INTER_LANCZOS4 )
+            CV_Assert( _src.channels() <= 4 );
+        }
+        else if( interpolation == INTER_LANCZOS4 ){
             ifunc = lanczos4_tab[depth];
+            CV_Assert( _src.channels() <= 4 );
+        }
         else
             CV_Error( CV_StsBadArg, "Unknown interpolation method" );
         CV_Assert( ifunc != 0 );
@@ -5523,6 +5864,9 @@ public:
         const int AB_BITS = MAX(10, (int)INTER_BITS);
         const int AB_SCALE = 1 << AB_BITS;
         int round_delta = interpolation == INTER_NEAREST ? AB_SCALE/2 : AB_SCALE/INTER_TAB_SIZE/2, x, y, x1, y1;
+    #if CV_AVX2
+        bool useAVX2 = checkHardwareSupport(CV_CPU_AVX2);
+    #endif
     #if CV_SSE2
         bool useSSE2 = checkHardwareSupport(CV_CPU_SSE2);
     #endif
@@ -5603,6 +5947,42 @@ public:
                     {
                         short* alpha = A + y1*bw;
                         x1 = 0;
+                    #if CV_AVX2
+                        if ( useAVX2 )
+                        {
+                            __m256i fxy_mask = _mm256_set1_epi32(INTER_TAB_SIZE - 1);
+                            __m256i XX = _mm256_set1_epi32(X0), YY = _mm256_set1_epi32(Y0);
+                            for( ; x1 <= bw - 16; x1 += 16 )
+                            {
+                                __m256i tx0, tx1, ty0, ty1;
+                                tx0 = _mm256_add_epi32(_mm256_loadu_si256((const __m256i*)(adelta + x + x1)), XX);
+                                ty0 = _mm256_add_epi32(_mm256_loadu_si256((const __m256i*)(bdelta + x + x1)), YY);
+                                tx1 = _mm256_add_epi32(_mm256_loadu_si256((const __m256i*)(adelta + x + x1 + 8)), XX);
+                                ty1 = _mm256_add_epi32(_mm256_loadu_si256((const __m256i*)(bdelta + x + x1 + 8)), YY);
+
+                                tx0 = _mm256_srai_epi32(tx0, AB_BITS - INTER_BITS);
+                                ty0 = _mm256_srai_epi32(ty0, AB_BITS - INTER_BITS);
+                                tx1 = _mm256_srai_epi32(tx1, AB_BITS - INTER_BITS);
+                                ty1 = _mm256_srai_epi32(ty1, AB_BITS - INTER_BITS);
+
+                                __m256i fx_ = _mm256_packs_epi32(_mm256_and_si256(tx0, fxy_mask),
+                                                                 _mm256_and_si256(tx1, fxy_mask));
+                                __m256i fy_ = _mm256_packs_epi32(_mm256_and_si256(ty0, fxy_mask),
+                                                                 _mm256_and_si256(ty1, fxy_mask));
+                                tx0 = _mm256_packs_epi32(_mm256_srai_epi32(tx0, INTER_BITS),
+                                                         _mm256_srai_epi32(tx1, INTER_BITS));
+                                ty0 = _mm256_packs_epi32(_mm256_srai_epi32(ty0, INTER_BITS),
+                                                         _mm256_srai_epi32(ty1, INTER_BITS));
+                                fx_ = _mm256_adds_epi16(fx_, _mm256_slli_epi16(fy_, INTER_BITS));
+                                fx_ = _mm256_permute4x64_epi64(fx_, (3 << 6) + (1 << 4) + (2 << 2) + 0);
+
+                                _mm256_storeu_si256((__m256i*)(xy + x1*2), _mm256_unpacklo_epi16(tx0, ty0));
+                                _mm256_storeu_si256((__m256i*)(xy + x1*2 + 16), _mm256_unpackhi_epi16(tx0, ty0));
+                                _mm256_storeu_si256((__m256i*)(alpha + x1), fx_);
+                            }
+                            _mm256_zeroupper();
+                        }
+                    #endif
                     #if CV_SSE2
                         if( useSSE2 )
                         {
@@ -5791,7 +6171,7 @@ static bool ocl_warpTransform_cols4(InputArray _src, OutputArray _dst, InputArra
     _dst.create( dsize.area() == 0 ? src.size() : dsize, src.type() );
     UMat dst = _dst.getUMat();
 
-    float M[9];
+    float M[9] = {0};
     int matRows = (op_type == OCL_OP_AFFINE ? 2 : 3);
     Mat matM(matRows, 3, CV_32F, M), M1 = _M0.getMat();
     CV_Assert( (M1.type() == CV_32F || M1.type() == CV_64F) && M1.rows == matRows && M1.cols == 3 );
@@ -5889,7 +6269,7 @@ static bool ocl_warpTransform(InputArray _src, OutputArray _dst, InputArray _M0,
     _dst.create( dsize.area() == 0 ? src.size() : dsize, src.type() );
     UMat dst = _dst.getUMat();
 
-    double M[9];
+    double M[9] = {0};
     int matRows = (op_type == OCL_OP_AFFINE ? 2 : 3);
     Mat matM(matRows, 3, CV_64F, M), M1 = _M0.getMat();
     CV_Assert( (M1.type() == CV_32F || M1.type() == CV_64F) &&
@@ -5964,6 +6344,10 @@ void cv::warpAffine( InputArray _src, OutputArray _dst,
 {
     CV_INSTRUMENT_REGION()
 
+    int interpolation = flags & INTER_MAX;
+    CV_Assert( _src.channels() <= 4 || (interpolation != INTER_LANCZOS4 &&
+                                        interpolation != INTER_CUBIC) );
+
     CV_OCL_RUN(_src.dims() <= 2 && _dst.isUMat() &&
                _src.cols() <= SHRT_MAX && _src.rows() <= SHRT_MAX,
                ocl_warpTransform_cols4(_src, _dst, _M0, dsize, flags, borderType,
@@ -5980,9 +6364,8 @@ void cv::warpAffine( InputArray _src, OutputArray _dst,
     if( dst.data == src.data )
         src = src.clone();
 
-    double M[6];
+    double M[6] = {0};
     Mat matM(2, 3, CV_64F, M);
-    int interpolation = flags & INTER_MAX;
     if( interpolation == INTER_AREA )
         interpolation = INTER_LINEAR;
 

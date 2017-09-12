@@ -179,6 +179,7 @@ public:
     template<typename _Tp> _InputArray(const std::vector<_Tp>& vec);
     _InputArray(const std::vector<bool>& vec);
     template<typename _Tp> _InputArray(const std::vector<std::vector<_Tp> >& vec);
+    _InputArray(const std::vector<std::vector<bool> >&);
     template<typename _Tp> _InputArray(const std::vector<Mat_<_Tp> >& vec);
     template<typename _Tp> _InputArray(const _Tp* vec, int n);
     template<typename _Tp, int m, int n> _InputArray(const Matx<_Tp, m, n>& matx);
@@ -192,8 +193,8 @@ public:
     _InputArray(const std::vector<UMat>& umv);
 
 #ifdef CV_CXX_STD_ARRAY
-    template<typename _Tp, std::size_t _N> _InputArray(const std::array<_Tp, _N>& arr);
-    template<std::size_t _N> _InputArray(const std::array<Mat, _N>& arr);
+    template<typename _Tp, std::size_t _Nm> _InputArray(const std::array<_Tp, _Nm>& arr);
+    template<std::size_t _Nm> _InputArray(const std::array<Mat, _Nm>& arr);
 #endif
 
     Mat getMat(int idx=-1) const;
@@ -302,6 +303,7 @@ public:
     template<typename _Tp> _OutputArray(std::vector<_Tp>& vec);
     _OutputArray(std::vector<bool>& vec);
     template<typename _Tp> _OutputArray(std::vector<std::vector<_Tp> >& vec);
+    _OutputArray(std::vector<std::vector<bool> >&);
     template<typename _Tp> _OutputArray(std::vector<Mat_<_Tp> >& vec);
     template<typename _Tp> _OutputArray(Mat_<_Tp>& m);
     template<typename _Tp> _OutputArray(_Tp* vec, int n);
@@ -326,10 +328,10 @@ public:
     _OutputArray(const std::vector<UMat>& vec);
 
 #ifdef CV_CXX_STD_ARRAY
-    template<typename _Tp, std::size_t _N> _OutputArray(std::array<_Tp, _N>& arr);
-    template<typename _Tp, std::size_t _N> _OutputArray(const std::array<_Tp, _N>& arr);
-    template<std::size_t _N> _OutputArray(std::array<Mat, _N>& arr);
-    template<std::size_t _N> _OutputArray(const std::array<Mat, _N>& arr);
+    template<typename _Tp, std::size_t _Nm> _OutputArray(std::array<_Tp, _Nm>& arr);
+    template<typename _Tp, std::size_t _Nm> _OutputArray(const std::array<_Tp, _Nm>& arr);
+    template<std::size_t _Nm> _OutputArray(std::array<Mat, _Nm>& arr);
+    template<std::size_t _Nm> _OutputArray(const std::array<Mat, _Nm>& arr);
 #endif
 
     bool fixedSize() const;
@@ -392,10 +394,10 @@ public:
     _InputOutputArray(const std::vector<UMat>& vec);
 
 #ifdef CV_CXX_STD_ARRAY
-    template<typename _Tp, std::size_t _N> _InputOutputArray(std::array<_Tp, _N>& arr);
-    template<typename _Tp, std::size_t _N> _InputOutputArray(const std::array<_Tp, _N>& arr);
-    template<std::size_t _N> _InputOutputArray(std::array<Mat, _N>& arr);
-    template<std::size_t _N> _InputOutputArray(const std::array<Mat, _N>& arr);
+    template<typename _Tp, std::size_t _Nm> _InputOutputArray(std::array<_Tp, _Nm>& arr);
+    template<typename _Tp, std::size_t _Nm> _InputOutputArray(const std::array<_Tp, _Nm>& arr);
+    template<std::size_t _Nm> _InputOutputArray(std::array<Mat, _Nm>& arr);
+    template<std::size_t _Nm> _InputOutputArray(const std::array<Mat, _Nm>& arr);
 #endif
 
 };
@@ -982,7 +984,7 @@ public:
 #ifdef CV_CXX_STD_ARRAY
     /** @overload
     */
-    template<typename _Tp, size_t _N> explicit Mat(const std::array<_Tp, _N>& arr, bool copyData=false);
+    template<typename _Tp, size_t _Nm> explicit Mat(const std::array<_Tp, _Nm>& arr, bool copyData=false);
 #endif
 
     /** @overload
@@ -1609,7 +1611,7 @@ public:
     template<typename _Tp, int m, int n> operator Matx<_Tp, m, n>() const;
 
 #ifdef CV_CXX_STD_ARRAY
-    template<typename _Tp, std::size_t _N> operator std::array<_Tp, _N>() const;
+    template<typename _Tp, std::size_t _Nm> operator std::array<_Tp, _Nm>() const;
 #endif
 
     /** @brief Reports whether the matrix is continuous or not.
@@ -2167,7 +2169,7 @@ public:
     explicit Mat_(const MatCommaInitializer_<_Tp>& commaInitializer);
 
 #ifdef CV_CXX_STD_ARRAY
-    template <std::size_t _N> explicit Mat_(const std::array<_Tp, _N>& arr, bool copyData=false);
+    template <std::size_t _Nm> explicit Mat_(const std::array<_Tp, _Nm>& arr, bool copyData=false);
 #endif
 
     Mat_& operator = (const Mat& m);
@@ -2194,6 +2196,8 @@ public:
     void create(Size _size);
     //! equivalent to Mat::create(_ndims, _sizes, DatType<_Tp>::type)
     void create(int _ndims, const int* _sizes);
+    //! equivalent to Mat::release()
+    void release();
     //! cross-product
     Mat_ cross(const Mat_& m) const;
     //! data type conversion
@@ -2266,7 +2270,7 @@ public:
 
 #ifdef CV_CXX_STD_ARRAY
     //! conversion to array.
-    template<std::size_t _N> operator std::array<_Tp, _N>() const;
+    template<std::size_t _Nm> operator std::array<_Tp, _Nm>() const;
 #endif
 
     //! conversion to Vec
@@ -2685,11 +2689,11 @@ public:
     /*!
         @param [out] m - output matrix; if it does not have a proper size or type before the operation,
             it is reallocated
-        @param [in] rtype – desired output matrix type or, rather, the depth since the number of channels
+        @param [in] rtype - desired output matrix type or, rather, the depth since the number of channels
             are the same as the input has; if rtype is negative, the output matrix will have the
             same type as the input.
-        @param [in] alpha – optional scale factor
-        @param [in] beta – optional delta added to the scaled values
+        @param [in] alpha - optional scale factor
+        @param [in] beta - optional delta added to the scaled values
     */
     void convertTo( Mat& m, int rtype, double alpha=1, double beta=0 ) const;
 
