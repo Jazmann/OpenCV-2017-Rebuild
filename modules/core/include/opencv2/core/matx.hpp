@@ -55,6 +55,7 @@
 
 namespace cv
 {
+using std::initializer_list;
 
 //! @addtogroup core_basic
 //! @{
@@ -101,6 +102,11 @@ public:
 
     //! default constructor
     Matx();
+    Matx(std::initializer_list<_Tp> initList)
+    {
+        //   CV_Assert(m*n == val.size()); // Generate error if initList.size() != m*n
+        std::uninitialized_copy(initList.begin(), initList.end(), val);
+    }
 
     Matx(_Tp v0); //!< 1x1 matrix
     Matx(_Tp v0, _Tp v1); //!< 1x2 or 2x1 matrix
@@ -313,7 +319,10 @@ public:
 
     //! default constructor
     Vec();
-
+    Vec(std::initializer_list<_Tp> initList)
+    {
+        std::uninitialized_copy(initList.begin(), initList.end(), this->val);
+    }
     Vec(_Tp v0); //!< 1-element vector constructor
     Vec(_Tp v0, _Tp v1); //!< 2-element vector constructor
     Vec(_Tp v0, _Tp v1, _Tp v2); //!< 3-element vector constructor
@@ -870,7 +879,36 @@ double norm(const Matx<_Tp, m, n>& M, int normType)
     }
 }
 
+//////////////////////////////// In row Max and Min //////////////////////////////////
 
+template<typename _Tp, int m, int n> inline cv::Matx<_Tp, m, 1> MaxInRow(Matx<_Tp, m, n> src){
+Matx<_Tp, m, 1> dst;
+for( int i = 0; i < m; i++ ){
+dst(i,0) = src(i,0);
+for( int j = 1; j < n; j++ )
+{
+if (dst(i,0) < src(i,j)) {
+dst(i,0) = src(i,j);
+}
+}
+}
+return dst;
+}
+
+
+template<typename _Tp, int m, int n> inline cv::Matx<_Tp, m, 1> MinInRow(Matx<_Tp, m, n> src){
+Matx<_Tp, m, 1> dst;
+for( int i = 0; i < m; i++ ){
+dst(i,0) = src(i,0);
+for( int j = 1; j < n; j++ )
+{
+if (dst(i,0) > src(i,j)) {
+dst(i,0) = src(i,j);
+}
+}
+}
+return dst;
+}
 
 //////////////////////////////// matx comma initializer //////////////////////////////////
 

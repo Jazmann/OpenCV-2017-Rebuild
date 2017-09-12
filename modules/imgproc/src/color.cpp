@@ -91,6 +91,7 @@
 \**********************************************************************************/
 
 #include "precomp.hpp"
+#include "opencv2/core/cvtraits.hpp"
 #include "opencl_kernels_imgproc.hpp"
 #include <limits>
 #include "hal_replacement.hpp"
@@ -103,8 +104,1564 @@
 #define MAX_IPP32f  1.0
 #endif
 
+
+//template struct  cv_Data_Type<CV_8U>;
+//template struct  cv_Data_Type<CV_8S>;
+//template struct  cv_Data_Type<CV_16U>;
+//template struct  cv_Data_Type<CV_16S>;
+//template struct  cv_Data_Type<CV_32U>;
+//template struct  cv_Data_Type<CV_32S>;
+//template struct  cv_Data_Type<CV_64U>;
+//template struct  cv_Data_Type<CV_64S>;
+//template struct  cv_Data_Type<CV_32F>;
+//template struct  cv_Data_Type<CV_64F>;
+//
+//template struct  cv::Data_Type<CV_8U>;
+//template struct  cv::Data_Type<CV_8S>;
+//template struct  cv::Data_Type<CV_16U>;
+//template struct  cv::Data_Type<CV_16S>;
+//template struct  cv::Data_Type<CV_32U>;
+//template struct  cv::Data_Type<CV_32S>;
+//template struct  cv::Data_Type<CV_64U>;
+//template struct  cv::Data_Type<CV_64S>;
+//template struct  cv::Data_Type<CV_32F>;
+//template struct  cv::Data_Type<CV_64F>;
+
+constexpr  char cv_Data_Type<CV_8U>::fmt[5];
+constexpr  char cv_Data_Type<CV_8S>::fmt[5];
+constexpr  char cv_Data_Type<CV_16U>::fmt[5];
+constexpr  char cv_Data_Type<CV_16S>::fmt[5];
+constexpr  char cv_Data_Type<CV_32U>::fmt[5];
+constexpr  char cv_Data_Type<CV_32S>::fmt[5];
+constexpr  char cv_Data_Type<CV_64U>::fmt[5];
+constexpr  char cv_Data_Type<CV_64S>::fmt[5];
+constexpr  char cv_Data_Type<CV_32F>::fmt[5];
+constexpr  char cv_Data_Type<CV_64F>::fmt[5];
+
 namespace cv
 {
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters()
+    {
+        this->init();
+    };
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::init()
+    {
+        // The distribution is described using 2 numbers which are related to the center and the standard deviation.
+        // If the center is in the range 0:1 then it is assumed that both the standard deviation and the
+        // center are specified in the 0:1 range. The type of the number also sets the choice of range.
+        // Distinguishing between the standard deviation s and the related parameter g is more difficult.
+        // +ve values are taken to be s
+        // -ve values are taken to be g
+    //     srcType c; double uC; // The center of the distribution in srcRange and unit range
+    //     double  s,        uS; // The standard deviation of the distribution in srcRange and unit range
+    //     double  g,        uG; // 1/(Sqrt(2) s) in srcRange and unit range
+        
+        sMax = srcInfo::max;  sMin = srcInfo::min; sRange = (sMax - sMin);
+        dMax = dstInfo::max;  dMin = dstInfo::min; dRange = dMax - dMin;
+        
+        uC = 0.5;                c = sRange / 2 + sMin;
+        uG = 1.0;                g = uG / double(sRange);
+        uS = 1.0/(sqrt(2) * uG); s = sRange * uS;
+        
+        ErfA = wrkType(erf(uC)); ErfB = wrkType(erf(uC)); ErfAB = ErfB + ErfA;
+        
+     //   useLookUpTable =
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_32F_TYPE _uC,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_uC);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_64F_TYPE _uC,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_uC);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_8U_TYPE _c,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_c);
+        setup();
+    };
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_8S_TYPE _c,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_c);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_16U_TYPE _c,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_c);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_16S_TYPE _c,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_c);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_32U_TYPE _c,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_c);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_32S_TYPE _c,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_c);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_64U_TYPE _c,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_c);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                  double sg, CV_64S_TYPE _c,
+                                  typename distributeErfParameters::srcType _sMin, typename distributeErfParameters::srcType _sMax,
+                                  typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax
+                                  ): sMin(_sMin), sMax(_sMax), dMin(_dMin), dMax(_dMax)
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        set(sg,_c);
+        setup();
+    };
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t>::distributeErfParameters(
+                                        distributeErfParameters<src_t, dst_t> &rhs)
+    {
+        sMax = rhs.sMax;  sMin = rhs.sMin; sRange = rhs.sRange;
+        dMax = rhs.dMax;  dMin = rhs.dMin; dRange = rhs.dRange;
+        
+        uC = rhs.uC; c = rhs.c;
+        uG = rhs.uG; g = rhs.g;
+        uS = rhs.uS; s = rhs.s;
+        
+        ErfA = rhs.ErfA; ErfB = rhs.ErfB; ErfAB = rhs.ErfAB;
+        
+        axisLength = rhs.axisLength;
+        K = rhs.K;         // The aspect ratio
+        kappa = rhs.kappa; // The compression ratio
+        m = rhs.m; uM = rhs.uM;  // \delta in the writeup
+        sDelta = rhs.sDelta; // quantum steps in the src.
+        dDelta = rhs.dDelta; // quantum steps in the destination.
+        
+        uLambda1 = rhs.uLambda1; uLambda2 = rhs.uLambda2;     // The discarded region bounds in the unit range
+         lambda1 = rhs.lambda1;   lambda2 = rhs.lambda2;      // The discarded region bounds in the sMin:sMax range computed for the distribution.
+        Lambda[0] = rhs.Lambda[0]; Lambda[1] = rhs.Lambda[1]; // The discarded region bounds actually used by the distribution.
+        
+        uOmega1  = rhs.uOmega1;  uOmega2  = rhs.uOmega2;  // The preserved 'keep' region bounds in the unit range.
+        omega1   = rhs.omega1;   omega2   = rhs.omega2;   // The preserved 'keep' region bounds in the sMin:sMax range computed for the distribution.
+        uOmegaP1 = rhs.uOmegaP1; uOmegaP2 = rhs.uOmegaP2; // The extended preserved 'keep' region bounds in the unit range.
+        omegaP1  = rhs.omegaP1;  omegaP2  = rhs.omegaP2;  // The extended preserved 'keep' region bounds in the sMin:sMax range computed for the distribution.
+        Omega[0] = rhs.Omega[0]; Omega[1] = rhs.Omega[1]; // The preserved 'keep' region bounds actually used by the distribution.
+
+        TolDiscard = rhs.TolDiscard; TolKeep = rhs.TolKeep; TolDistribute = rhs.TolDistribute;
+        Qdiscard = rhs.Qdiscard;     Qkeep   = rhs.Qkeep;   Qdistribute   = rhs.Qdistribute;
+        disConstant = rhs.disConstant;    // dis(x) = disScale * erf( g * (x - c) ) + disConstant;
+        disScale = rhs.disScale;
+        
+        disMin = rhs.disMin;                           // The minimum value taken by the distribution/
+        linearGrad = rhs.linearGrad;                   // The linear gradient of the distribution pDis(x) = linearGrad x + linearConstant
+        linearConstant = rhs.linearConstant;           // The value added in the linear section of the distribution pDis(x) = x + linearConstant
+        shiftednErfConstant = rhs.shiftednErfConstant; // The height lost by using the linear distribution pDis(x) = dis(x) + shiftednErfConstant
+        disMax = rhs.disMax;                           // The maximun value taken by the distribution.
+        
+        useLookUpTable = rhs.useLookUpTable;
+
+    };
+    
+    
+template<int src_t, int dst_t> distributeErfParameters<src_t, dst_t> &distributeErfParameters<src_t, dst_t>::operator=(distributeErfParameters<src_t, dst_t> rhs)
+    {
+        sMax = rhs.sMax;  sMin = rhs.sMin; sRange = rhs.sRange;
+        dMax = rhs.dMax;  dMin = rhs.dMin; dRange = rhs.dRange;
+        
+        uC = rhs.uC; c = rhs.c;
+        uG = rhs.uG; g = rhs.g;
+        uS = rhs.uS; s = rhs.s;
+        
+        ErfA = rhs.ErfA; ErfB = rhs.ErfB; ErfAB = rhs.ErfAB;
+        
+        axisLength = rhs.axisLength;
+        K = rhs.K;         // The aspect ratio
+        kappa = rhs.kappa; // The compression ratio
+        m = rhs.m; uM = rhs.uM;  // \delta in the writeup
+        sDelta = rhs.sDelta; // quantum steps in the src.
+        dDelta = rhs.dDelta; // quantum steps in the destination.
+        
+        uLambda1 = rhs.uLambda1; uLambda2 = rhs.uLambda2;     // The discarded region bounds in the unit range
+        lambda1 = rhs.lambda1;   lambda2 = rhs.lambda2;      // The discarded region bounds in the sMin:sMax range computed for the distribution.
+        Lambda[0] = rhs.Lambda[0]; Lambda[1] = rhs.Lambda[1]; // The discarded region bounds actually used by the distribution.
+        
+        uOmega1  = rhs.uOmega1;  uOmega2  = rhs.uOmega2;  // The preserved 'keep' region bounds in the unit range.
+        omega1   = rhs.omega1;   omega2   = rhs.omega2;   // The preserved 'keep' region bounds in the sMin:sMax range computed for the distribution.
+        uOmegaP1 = rhs.uOmegaP1; uOmegaP2 = rhs.uOmegaP2; // The extended preserved 'keep' region bounds in the unit range.
+        omegaP1  = rhs.omegaP1;  omegaP2  = rhs.omegaP2;  // The extended preserved 'keep' region bounds in the sMin:sMax range computed for the distribution.
+        Omega[0] = rhs.Omega[0]; Omega[1] = rhs.Omega[1]; // The preserved 'keep' region bounds actually used by the distribution.
+        
+        TolDiscard = rhs.TolDiscard; TolKeep = rhs.TolKeep; TolDistribute = rhs.TolDistribute;
+        Qdiscard = rhs.Qdiscard;     Qkeep   = rhs.Qkeep;   Qdistribute   = rhs.Qdistribute;
+        disConstant = rhs.disConstant;    // dis(x) = disScale * erf( g * (x - c) ) + disConstant;
+        disScale = rhs.disScale;
+        
+        disMin = rhs.disMin;                           // The minimum value taken by the distribution/
+        linearGrad = rhs.linearGrad;                   // The linear gradient of the distribution pDis(x) = linearGrad x + linearConstant
+        linearConstant = rhs.linearConstant;           // The value added in the linear section of the distribution pDis(x) = x + linearConstant
+        shiftednErfConstant = rhs.shiftednErfConstant; // The height lost by using the linear distribution pDis(x) = dis(x) + shiftednErfConstant
+        disMax = rhs.disMax;                           // The maximun value taken by the distribution.
+        
+        useLookUpTable = rhs.useLookUpTable;
+
+        return *this;
+    }
+
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setRange(typename distributeErfParameters::srcType _sMin,
+                                                                               typename distributeErfParameters::srcType _sMax,
+                                                                               typename distributeErfParameters::dstType _dMin,
+                                                                               typename distributeErfParameters::dstType _dMax
+                                                                               )
+    {
+        CV_Assert((int)sMin < (int)sMax && (int)dMin <= (int)dMax);
+        sMin = _sMin; sMax = _sMax; dMin = _dMin; dMax = _dMax;
+        sRange = (sMax - sMin);  dRange = (dMax - dMin);
+        setUnitCenter(this->uC);
+        setUnitG(this->uG);
+        setup();
+    };
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setSrcRange(typename distributeErfParameters::srcType _sMin,
+                                                                                       typename distributeErfParameters::srcType _sMax)
+    {
+        sRange = (_sMax - _sMin);
+        sMin = _sMin; sMax = _sMax;
+        setUnitCenter(this->uC);
+        setUnitG(this->uG);
+        setup();
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setDstRange(typename distributeErfParameters::dstType _dMin, typename distributeErfParameters::dstType _dMax)
+    {
+        dMin = _dMin; dMax = _dMax;
+        dRange = (_dMax - _dMin);
+        setUnitCenter(this->uC);
+        setUnitG(this->uG);
+        setup();
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _uSuG, CV_32F_TYPE _uC)
+    {
+        if(0.0 <= uC && uC <= 1.0) {
+            setUnitCenter( double(_uC));
+            if (_uSuG < 0.0) { // _uSuG specifies uG
+                setUnitG(-1.0*_uSuG);
+            } else {      // _uSuG specifies uS
+                setUnitSigma(_uSuG);
+            }
+
+        } else {
+            setSrcCenter(srcType(_uC));
+            if (_uSuG < 0.0) { // _uSuG specifies g
+                setSrcG(-1.0*_uSuG);
+            } else {      // _uSuG specifies s
+                setSrcSigma(_uSuG);
+            }
+
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _uSuG, CV_64F_TYPE _uC)
+    {
+        if(0.0 <= uC && uC <= 1.0) {
+            setUnitCenter( double(_uC));
+            if (_uSuG < 0.0) { // _uSuG specifies uG
+                setUnitG(-1.0*_uSuG);
+            } else {      // _uSuG specifies uS
+                setUnitSigma(_uSuG);
+            }
+            
+        } else {
+            setSrcCenter(srcType(_uC));
+            if (_uSuG < 0.0) { // _uSuG specifies g
+                setSrcG(-1.0*_uSuG);
+            } else {      // _uSuG specifies s
+                setSrcSigma(_uSuG);
+            }
+            
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _sg, CV_8U_TYPE _c)
+    {
+        setSrcCenter(srcType(_c));
+        if (_sg < 0.0) { // _sg specifies g
+            setSrcG(-1.0*_sg);
+        } else {      // _sg specifies s
+            setSrcSigma(_sg);
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _sg, CV_8S_TYPE _c)
+    {
+        setSrcCenter(srcType(_c));
+        if (_sg < 0.0) { // _sg specifies g
+            setSrcG(-1.0*_sg);
+        } else {      // _sg specifies s
+            setSrcSigma(_sg);
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _sg, CV_16U_TYPE _c)
+    {
+        setSrcCenter(srcType(_c));
+        if (_sg < 0.0) { // _sg specifies g
+            setSrcG(-1.0*_sg);
+        } else {      // _sg specifies s
+            setSrcSigma(_sg);
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _sg, CV_16S_TYPE _c)
+    {
+        setSrcCenter(srcType(_c));
+        if (_sg < 0.0) { // _sg specifies g
+            setSrcG(-1.0*_sg);
+        } else {      // _sg specifies s
+            setSrcSigma(_sg);
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _sg, CV_32U_TYPE _c)
+    {
+        setSrcCenter(srcType(_c));
+        if (_sg < 0.0) { // _sg specifies g
+            setSrcG(-1.0*_sg);
+        } else {      // _sg specifies s
+            setSrcSigma(_sg);
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _sg, CV_32S_TYPE _c)
+    {
+        setSrcCenter(srcType(_c));
+        if (_sg < 0.0) { // _sg specifies g
+            setSrcG(-1.0*_sg);
+        } else {      // _sg specifies s
+            setSrcSigma(_sg);
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _sg, CV_64U_TYPE _c)
+    {
+        setSrcCenter(srcType(_c));
+        if (_sg < 0.0) { // _sg specifies g
+            setSrcG(-1.0*_sg);
+        } else {      // _sg specifies s
+            setSrcSigma(_sg);
+        }
+    }
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::set(double _sg, CV_64S_TYPE _c)
+    {
+        setSrcCenter(srcType(_c));
+        if (_sg < 0.0) { // _sg specifies g
+            setSrcG(-1.0*_sg);
+        } else {      // _sg specifies s
+            setSrcSigma(_sg);
+        }
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setUnitCenter(double _uC)
+    {
+        CV_Assert(0.0 <= uC && uC <= 1.0);
+        this->uC = _uC;
+        this->c  = srcType(sRange * uC + sMin);
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setSrcCenter(typename distributeErfParameters::srcType _c)
+    {
+        CV_Assert((int)sMin <= (int)_c && (int)_c <= (int)sMax );
+        this->c  = _c;
+        this->uC = double(c - sMin)/double(sRange);
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setUnitSigma(double _uS)
+    {
+        this->uS = _uS;                   this->s = sRange * _uS;
+        this->uG = 1.0/(sqrt(2.0) * _uS); this->g = uG / double(sRange);
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setSrcSigma(double _s)
+    {
+        this->s = _s;                     this->uS = _s / double(sRange);
+        this->g = 1.0/(sqrt(2.0) * _s);   this->uG =  g * double(sRange);
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setUnitG(double _uG)
+    {
+        this->uG = _uG;                   this->g = _uG / double(sRange);
+        this->uS = 1.0/(sqrt(2.0) * _uG); this->s = sRange * uS;
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setSrcG(double _g)
+    {
+        this->g = _g;                     this->uG = _g * double(sRange);
+        this->s = 1.0/(sqrt(2.0) * _g);   this->uS =  s / double(sRange);
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setInternals()
+    {
+        ErfA = erf(uG * uC);
+        ErfB = erf((uG*(1 - uC)));
+        ErfAB = ErfB + ErfA;
+        
+        K = double(sRange)/double(dRange);
+        uM = (2.0 * uG)/(std::sqrt(CV_PI) * ErfAB); // \delta in the writeup
+        m = uM / K;
+        
+        kappa = max(1.0/uM, K/axisLength);
+        
+        sDelta = 1.0 / sRange;
+        dDelta = 1.0 / dRange;
+        
+        TolDiscard    = 4.0/double(sRange);
+        TolKeep       = 4.0/double(sRange);
+        TolDistribute = 8.0/double(sRange);
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setDiscardRegionBounds()
+    {
+        // Discard region bounds.
+        
+        uLambda1 = uC - erfinv((1.0 - dDelta)*ErfA - dDelta*ErfB )/uG;
+        uLambda2 = uC + erfinv((1.0 - dDelta)*ErfB - dDelta*ErfA )/uG;
+        
+        lambda1 = srcType(floor(sRange * uLambda1)) + sMin;
+        lambda2 = srcType( ceil(sRange * uLambda2)) + sMin;
+        
+        Qdiscard = TolDiscard <= 1 - uLambda2 + uLambda1;
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setKeepRegionBounds()
+    {
+        // Keep region bounds.
+        
+        if (uM < K) {
+            // The distribution gradient never goes above 1.
+            // There is no region in which all the information is kept.
+            Qkeep = 0;
+            uOmega1  = uC; omega1  = c;
+            uOmega2  = uC; omega2  = c;
+            uOmegaP1 = uC; omegaP1 = c;
+            uOmegaP2 = uC; omegaP2 = c;
+            
+        } else {
+            
+            uOmega1 = uC - sqrt(log(uM/kappa))/uG; omega1 = srcType( ceil(sRange * uOmega1)) + sMin;
+            uOmega2 = uC + sqrt(log(uM/kappa))/uG; omega2 = srcType(floor(sRange * uOmega2)) + sMin;
+            
+            // Find the extedned keep region.
+            srcType x = omega2;
+            srcType Tp = 1; // Acceptable divergence from linearity Tp
+            double disOmega2 = dRange * ( erf( g * (omega2-c) ) + ErfA ) / ( ErfAB ) + dMin;
+            //            double disOmega2 = dRange * ( erf( g * (omega2-c) ) - erf( g * (sMin-c) ) ) / ( erf( g * (sMax-c) ) - erf( g * (sMin-c) ) ) + dMin;
+            srcType linearCheck = floor(disOmega2) - omega2 - Tp;
+            
+            //            disX = dRange * ( erf( g * (x-c) ) - erf( g * (sMin-c) ) ) / ( erf( g * (sMax-c) ) - erf( g * (sMin-c) ) ) + dMin;
+            double disX = dRange * ( erf( g * (x-c) ) + ErfA ) / ( ErfAB ) + dMin;
+            while (disX > x + linearCheck && x < sMax) {
+                x++;
+                disX = dRange * ( erf( g * (x-c) ) + ErfA ) / ( ErfAB ) + dMin;
+            }
+            
+            omegaP2 = x;
+            omegaP1 = omega1 - omegaP2 + omega2;
+            
+            uOmegaP2 = double(omegaP2 - sMin)/double(sRange);
+            uOmegaP1 = double(omegaP1 - sMin)/double(sRange);
+            
+            Qkeep = uOmegaP2 - uOmegaP1 >= TolKeep;
+            
+        }
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setRegionQ()
+    {
+        Qdiscard    = TolDiscard <= 1 - uLambda2 + uLambda1;
+        Qkeep       = TolKeep <= uOmegaP2 - uOmegaP1 ;
+        Qdistribute = TolDistribute <= uLambda2 - uOmegaP2 + uOmegaP1 - uLambda1;
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setDistributionParameters()
+    {
+        // The unpartitioned distribution uses.
+        // dis(x) = disScale * erf( g * (x - c) ) + disConstant;
+        disConstant = dRange * ErfA/ ErfAB    + dMin +1;
+        disScale = (dRange / ErfAB);
+        // Default values for the piecewise distribution.
+        disMin     = dMin;  disMax         = dMax;
+        linearGrad = 1.0;   linearConstant = dMin;
+        shiftednErfConstant = 0;
+        Lambda[0] = sMin;                   Lambda[1] = sMax;
+         Omega[0] = sMin+srcType(sRange/2);  Omega[1] = sMin+srcType(sRange/2);
+        
+        disMin  = dMin;
+        disMax  = dMax;
+        linearGrad = 1.0;
+        linearConstant = dMin;
+        shiftednErfConstant = 0;
+        Lambda[0] = sMin;
+        Lambda[1] = sMax;
+        Omega[0] = sMin+srcType(sRange/2);
+        Omega[1] = sMin+srcType(sRange/2);
+        
+        if (Qkeep) {
+            
+            if (Qdiscard) {
+                
+                if (Qdistribute) {
+                    // Qkeep && Qdiscard && Qdistribute
+                    //
+                    // CompactErfDistribution
+                    //
+                    //         = disMin;                                                            sMin    <= x <= lambda1
+                    //         = disScale * erf( g * (x - c) ) + disConstant;                       lambda1 <  x <  omegaP1
+                    // pDis(x) = x - linearConstant;                                                omegaP1 <= x <= omegaP2
+                    //         = disScale * erf( g * (x - c) ) + disConstant + shiftednErfConstant; omegaP2 <  x <  lambda2
+                    //         = disMax;                                                            lambda1 <= x <= sMax
+                    //
+                    dstType disOmegaP1 = dRange * ( erf( g * (omegaP1-c) ) + ErfA ) / ( ErfAB ) + dMin;
+                    dstType disOmegaP2 = dRange * ( erf( g * (omegaP2-c) ) + ErfA ) / ( ErfAB ) + dMin;
+                    dstType disLambda2 = dRange * ( erf( g * (lambda2-c) ) + ErfA ) / ( ErfAB ) + dMin;
+                    
+                    disMin  = dMin;
+                    disMax = disLambda2 + disOmegaP1 - omegaP1 - disOmegaP2 + omegaP2;
+                    linearGrad = 1.0;
+                    linearConstant =  omegaP1-disOmegaP1;
+                    shiftednErfConstant = disOmegaP1 - omegaP1 - disOmegaP2 + omegaP2;
+                    Lambda[0] = lambda1;
+                    Lambda[1] = lambda2;
+                    Omega[0] = omegaP1;
+                    Omega[1] = omegaP2;
+                    
+                    
+                } else {
+                    // Qkeep && Qdiscard && !Qdistribute
+                    //
+                    // PartitionDistribution
+                    //
+                    //         = disMin;                          x <  lambda1
+                    // pDis(x) = x - linearConstant;   lambda1 <= x <= lambda2
+                    //         = disMax;               lambda1 <  x
+                    dstType disOmegaP1 = dRange * ( erf( g * (lambda1-c) ) + ErfA ) / ( ErfAB ) + dMin;
+                    dstType disOmegaP2 = dRange * ( erf( g * (lambda2-c) ) + ErfA ) / ( ErfAB ) + dMin;
+                    
+                    disMin  = dMin;
+                    disMax = lambda2 - lambda1 + dMin;
+                    linearGrad = 1.0;
+                    linearConstant = lambda1;
+                    shiftednErfConstant =  disOmegaP1 - omegaP1 - disOmegaP2 + omegaP2;
+                    Lambda[0] = lambda1;
+                    Lambda[1] = lambda2;
+                     Omega[0] = lambda1;
+                     Omega[1] = lambda2;
+                    
+                };
+                
+            } else {
+                
+                if (Qdistribute) {
+                    // Qkeep && !Qdiscard && Qdistribute
+                    //
+                    // CompactErfDistribution
+                    //
+                    //         = disScale * erf( g * (x - c) ) + disConstant;                                  x <  omegaP1
+                    // pDis(x) = x - linearConstant;                                                omegaP1 <= x <= omegaP2
+                    //         = disScale * erf( g * (x - c) ) + disConstant + shiftednErfConstant; omegaP2 <  x
+                    
+                    dstType disOmegaP1 = dRange * ( erf( g * (omegaP1-c) ) + ErfA ) / ( ErfAB ) + dMin;
+                    dstType disOmegaP2 = dRange * ( erf( g * (omegaP2-c) ) + ErfA ) / ( ErfAB ) + dMin;
+                    dstType disSMax = dRange * ( erf( g * (sMax-c) ) + ErfA ) / ( ErfAB ) + dMin;
+                    
+                    disMin  = dMin;
+                    disMax = disSMax + disOmegaP1 - omegaP1 - disOmegaP2 + omegaP2;
+                    linearGrad = 1.0;
+                    linearConstant =  omegaP1 - disOmegaP1;
+                    shiftednErfConstant = disOmegaP1 - omegaP1 - disOmegaP2 + omegaP2;
+                    Omega[0] = omegaP1;
+                    Omega[1] = omegaP2;
+                    
+                } else {
+                    // Qkeep && !Qdiscard && !Qdistribute
+                    //
+                    // PartitionDistribution
+                    //
+                    //         = disMin;                       x <= sMin
+                    // pDis(x) = x - linearConstant;   sMin <= x <= sMax
+                    //         = disMax;               sMax <  x
+                    if(wrkType(dRange)>=wrkType(sRange)){
+                        // Move lower and upper limits to sMin and sMax
+                        disMin = dMin;
+                        disMax = dMin + sRange;
+                        linearGrad = 1.0;
+                        linearConstant = sMin-dMin;
+                        shiftednErfConstant = 0;
+                        Lambda[0] = sMin;
+                        Lambda[1] = sMax;
+                    } else {
+                        
+                        // Keep lower and upper limits as lambda1 and lambda2
+                        disMin = dMin;
+                        disMax = dMax;
+                        linearGrad = 1.0;
+                        linearConstant = sMin-dMin;
+                        shiftednErfConstant = 0;
+                        Lambda[0] = lambda1;
+                        Lambda[1] = lambda2;
+
+                    }
+                };
+                
+            };
+            
+        } else {
+            
+            if (Qdiscard) {
+                
+                if (Qdistribute) {
+                    // !Qkeep && Qdiscard && Qdistribute
+                    //
+                    // ErfDistribution
+                    //
+                    //         = disMin;                                                   x <= lambda1
+                    // pDis(x) = disScale * erf( g * (x - c) ) + disConstant;   lambda1 <  x <  lambda2
+                    //         = disMax;                                        lambda1 <= x
+                    
+                    disMin = dMin;
+                    linearGrad = 1.0;
+                    linearConstant = -1*dMin;
+                    shiftednErfConstant = 0;
+                    disMax = dMax;
+                    Lambda[0] = lambda1;
+                    Lambda[1] = lambda2;
+                    
+                } else {
+                    // !Qkeep && Qdiscard && !Qdistribute
+                    //
+                    // StepDistribution
+                    //
+                    // pDis(x) = disMin;       x <= (lambda1+lambda2)/2
+                    //         = disMax;       x >  (lambda1+lambda2)/2
+                    
+                    disMin = dMin;
+                    linearGrad = 1.0;
+                    linearConstant = -1*dMin;;
+                    shiftednErfConstant = 0;
+                    disMax = 1+dMin;
+                    Omega[0] = srcType(floor(double(lambda1+lambda2)/2.0));
+                    Omega[1] = srcType(ceil(double(lambda1+lambda2)/2.0));
+                    
+                };
+                
+            } else {
+                
+                if (Qdistribute) {
+                    // !Qkeep && !Qdiscard && Qdistribute
+                    //
+                    // ErfDistribution
+                    //
+                    //         = disMin;                                                x <= sMin
+                    // pDis(x) = disScale * erf( g * (x - c) ) + disConstant;   sMin <  x <  sMax
+                    //         = disMax;                                        sMax <= x
+                    //
+                    disMin = dMin;
+                    linearGrad = 1.0;
+                    linearConstant = -1*dMin;
+                    shiftednErfConstant = 0;
+                    disMax = dMax;
+                } else {
+                    // !Qkeep && !Qdiscard && !Qdistribute
+                    //
+                    // LinearDistribution.
+                    //
+                    // pDis(x) = linearGrad * x - linearConstant;
+                    //
+                    disMin = dMin;
+                    linearGrad = 1.0/K;
+                    linearConstant = sMin - dMin;
+                    shiftednErfConstant = 0;
+                    disMax = dMax;
+                };
+                
+            };
+            
+        };
+        
+        //   useLookUpTable =
+    }
+    
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::setup()
+    {
+        setInternals();
+        setDiscardRegionBounds();
+        setKeepRegionBounds();
+        setRegionQ();
+        setDistributionParameters();
+    }
+    
+template<int src_t, int dst_t> void distributeErfParameters<src_t, dst_t>::print()
+    {
+        char buf[100];
+        strcpy(buf, "c = "); strcat(buf, srcInfo::fmt); strcat(buf, " <= "); strcat(buf, srcInfo::fmt); strcat(buf, " <= ");strcat(buf, srcInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,sMin,c,sMax);
+        fprintf (stdout, "uC = %.14f;\n",uC);
+        fprintf (stdout, "s = %.14f;\n",s);
+        fprintf (stdout, "uS = %.14f;\n",uS);
+        fprintf (stdout, "g = %.14f;\n",g);
+        fprintf (stdout, "uG = %.14f;\n",uG);
+        
+        fprintf (stdout, "ErfA = %.14f;\n",ErfA);
+        fprintf (stdout, "ErfB = %.14f;\n",ErfB);
+        fprintf (stdout, "ErfAB = %.14f;\n",ErfAB);
+        fprintf (stdout, "K = %.14f;\n",K);
+        fprintf (stdout, "m = %.14f;\n",m);
+        fprintf (stdout, "uM = %.14f;\n",uM);
+        fprintf (stdout, "sDelta = %.14f;\n",sDelta);
+        fprintf (stdout, "dDelta = %.14f;\n",dDelta);
+    
+        strcpy(buf, "disConstant = "); strcat(buf, dstInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,disConstant);
+        fprintf (stdout, "disScale = %.14f;\n",disScale);
+        strcpy(buf, "disMin = "); strcat(buf, dstInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,disMin);
+        fprintf (stdout, "linearGrad = %.14f;\n",linearGrad);
+        strcpy(buf, "disMax = "); strcat(buf, dstInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,disMax);
+        strcpy(buf, "linearConstant = "); strcat(buf, dstInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,linearConstant);
+        strcpy(buf, "shiftednErfConstant = "); strcat(buf, dstInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,shiftednErfConstant);
+        
+        fprintf (stdout, "uLambda1 = %.14f;\n",uLambda1);
+        fprintf (stdout, "uLambda2 = %.14f;\n",uLambda2);
+        fprintf (stdout, "uOmega1 = %.14f;\n",uOmega1);
+        fprintf (stdout, "uOmega2 = %.14f;\n",uOmega2);
+        fprintf (stdout, "uOmegaP1 = %.14f;\n",uOmegaP1);
+        fprintf (stdout, "uOmegaP2 = %.14f;\n",uOmegaP2);
+        
+        strcpy(buf, "Lambda = {"); strcat(buf, srcInfo::fmt); strcat(buf, ", "); strcat(buf, srcInfo::fmt); strcat(buf, "};\n");
+        fprintf (stdout, buf,Lambda[0],Lambda[1]);
+        
+        strcpy(buf, "Omega = {"); strcat(buf, srcInfo::fmt); strcat(buf, ", "); strcat(buf, srcInfo::fmt); strcat(buf, "};\n");
+        fprintf (stdout, buf,Omega[0],Omega[1]);
+        
+        strcpy(buf, "lambda1 = "); strcat(buf, srcInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,lambda1);
+        
+        strcpy(buf, "lambda2 = "); strcat(buf, srcInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,lambda2);
+        
+        strcpy(buf, "omega1 = "); strcat(buf, srcInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,omega1);
+        
+        strcpy(buf, "omega2 = "); strcat(buf, srcInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,omega2);
+        
+        strcpy(buf, "omegaP1 = "); strcat(buf, srcInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,omegaP1);
+        
+        strcpy(buf, "omegaP2 = "); strcat(buf, srcInfo::fmt); strcat(buf, ";\n");
+        fprintf (stdout, buf,omegaP2);
+        if (Qkeep) {
+            
+            if (Qdiscard) {
+                
+                if (Qdistribute) {
+                    fprintf (stdout,"(*\n");
+                    fprintf (stdout," Qkeep && Qdiscard && Qdistribute\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," CompactErfDistribution\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout,"         = disMin;                                                            sMin    <= x <= lambda1\n");
+                    fprintf (stdout,"         = disScale * erf( g * (x - c) ) + disConstant;                       lambda1 <  x <  omegaP1\n");
+                    fprintf (stdout," pDis(x) = x - linearConstant;                                                omegaP1 <= x <= omegaP2\n");
+                    fprintf (stdout,"         = disScale * erf( g * (x - c) ) + disConstant + shiftednErfConstant; omegaP2 <  x <  lambda2\n");
+                    fprintf (stdout,"         = disMax;                                                            lambda1 <= x <= sMax\n");
+                    fprintf (stdout,"*)\n");
+                } else {
+                    fprintf (stdout,"(*\n");
+                    fprintf (stdout," Qkeep && Qdiscard && !Qdistribute\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," PartitionDistribution\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout,"         = disMin;                          x <  lambda1\n");
+                    fprintf (stdout," pDis(x) = x - linearConstant;   lambda1 <= x <= lambda2\n");
+                    fprintf (stdout,"         = disMax;               lambda1 <  x\n");
+                    fprintf (stdout,"*)\n");
+                };
+            } else {
+                if (Qdistribute) {
+                    fprintf (stdout,"(*\n");
+                    fprintf (stdout," Qkeep && !Qdiscard && Qdistribute\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," CompactErfDistribution\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout,"         = disScale * erf( g * (x - c) ) + disConstant;                                  x <  omegaP1\n");
+                    fprintf (stdout," pDis(x) = x - linearConstant;                                                omegaP1 <= x <= omegaP2\n");
+                    fprintf (stdout,"         = disScale * erf( g * (x - c) ) + disConstant + shiftednErfConstant; omegaP2 <  x\n");
+                    fprintf (stdout,"*)\n");
+                } else {
+                    fprintf (stdout,"(*\n");
+                    fprintf (stdout," Qkeep && !Qdiscard && !Qdistribute\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," PartitionDistribution\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout,"         = disMin;                       x <= sMin\n");
+                    fprintf (stdout," pDis(x) = x - linearConstant;   sMin <= x <= sMax\n");
+                    fprintf (stdout,"         = disMax;               sMax <  x\n");
+                    fprintf (stdout,"*)\n");
+                };
+            };
+        } else {
+            if (Qdiscard) {
+                if (Qdistribute) {
+                    fprintf (stdout,"(*\n");
+                    fprintf (stdout," !Qkeep && Qdiscard && Qdistribute\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," ErfDistribution\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout,"         = disMin;                                                   x <= lambda1\n");
+                    fprintf (stdout," pDis(x) = disScale * erf( g * (x - c) ) + disConstant;   lambda1 <  x <  lambda2\n");
+                    fprintf (stdout,"         = disMax;                                        lambda1 <= x\n");
+                    fprintf (stdout,"*)\n");
+                } else {
+                    fprintf (stdout,"(*\n");
+                    fprintf (stdout," !Qkeep && Qdiscard && !Qdistribute\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," StepDistribution\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," pDis(x) = disMin;       x <= (lambda1+lambda2)/2\n");
+                    fprintf (stdout,"         = disMax;       x >  (lambda1+lambda2)/2\n");
+                    fprintf (stdout,"*)\n");
+                };
+            } else {
+                if (Qdistribute) {
+                    fprintf (stdout,"(*\n");
+                    fprintf (stdout," !Qkeep && !Qdiscard && Qdistribute\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," ErfDistribution\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout,"         = disMin;                                                x <= sMin\n");
+                    fprintf (stdout," pDis(x) = disScale * erf( g * (x - c) ) + disConstant;   sMin <  x <  sMax\n");
+                    fprintf (stdout,"         = disMax;                                        sMax <= x\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout,"*)\n");
+                } else {
+                    fprintf (stdout,"(*\n");
+                    fprintf (stdout," !Qkeep && !Qdiscard && !Qdistribute\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," LinearDistribution.\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout," pDis(x) = linearGrad * x - linearConstant;\n");
+                    fprintf (stdout,"\n");
+                    fprintf (stdout,"*)\n");
+                };
+            };
+        };
+    };
+
+    template class distributeErfParameters<CV_8U, CV_8U>;      template class distributeErfParameters<CV_8S, CV_8U>;
+    template class distributeErfParameters<CV_8U, CV_8S>;      template class distributeErfParameters<CV_8S, CV_8S>;
+    template class distributeErfParameters<CV_8U, CV_16U>;     template class distributeErfParameters<CV_8S, CV_16U>;
+    template class distributeErfParameters<CV_8U, CV_16S>;     template class distributeErfParameters<CV_8S, CV_16S>;
+    template class distributeErfParameters<CV_8U, CV_32U>;     template class distributeErfParameters<CV_8S, CV_32U>;
+    template class distributeErfParameters<CV_8U, CV_32S>;     template class distributeErfParameters<CV_8S, CV_32S>;
+    template class distributeErfParameters<CV_8U, CV_64U>;     template class distributeErfParameters<CV_8S, CV_64U>;
+    template class distributeErfParameters<CV_8U, CV_64S>;     template class distributeErfParameters<CV_8S, CV_64S>;
+    
+    template class distributeErfParameters<CV_16U, CV_8U>;     template class distributeErfParameters<CV_16S, CV_8U>;
+    template class distributeErfParameters<CV_16U, CV_8S>;     template class distributeErfParameters<CV_16S, CV_8S>;
+    template class distributeErfParameters<CV_16U, CV_16U>;    template class distributeErfParameters<CV_16S, CV_16U>;
+    template class distributeErfParameters<CV_16U, CV_16S>;    template class distributeErfParameters<CV_16S, CV_16S>;
+    template class distributeErfParameters<CV_16U, CV_32U>;    template class distributeErfParameters<CV_16S, CV_32U>;
+    template class distributeErfParameters<CV_16U, CV_32S>;    template class distributeErfParameters<CV_16S, CV_32S>;
+    template class distributeErfParameters<CV_16U, CV_64U>;    template class distributeErfParameters<CV_16S, CV_64U>;
+    template class distributeErfParameters<CV_16U, CV_64S>;    template class distributeErfParameters<CV_16S, CV_64S>;
+    
+    template class distributeErfParameters<CV_32U, CV_8U>;     template class distributeErfParameters<CV_32S, CV_8U>;
+    template class distributeErfParameters<CV_32U, CV_8S>;     template class distributeErfParameters<CV_32S, CV_8S>;
+    template class distributeErfParameters<CV_32U, CV_16U>;    template class distributeErfParameters<CV_32S, CV_16U>;
+    template class distributeErfParameters<CV_32U, CV_16S>;    template class distributeErfParameters<CV_32S, CV_16S>;
+    template class distributeErfParameters<CV_32U, CV_32U>;    template class distributeErfParameters<CV_32S, CV_32U>;
+    template class distributeErfParameters<CV_32U, CV_32S>;    template class distributeErfParameters<CV_32S, CV_32S>;
+    template class distributeErfParameters<CV_32U, CV_64U>;    template class distributeErfParameters<CV_32S, CV_64U>;
+    template class distributeErfParameters<CV_32U, CV_64S>;    template class distributeErfParameters<CV_32S, CV_64S>;
+    
+    template class distributeErfParameters<CV_64U, CV_8U>;     template class distributeErfParameters<CV_64S, CV_8U>;
+    template class distributeErfParameters<CV_64U, CV_8S>;     template class distributeErfParameters<CV_64S, CV_8S>;
+    template class distributeErfParameters<CV_64U, CV_16U>;    template class distributeErfParameters<CV_64S, CV_16U>;
+    template class distributeErfParameters<CV_64U, CV_16S>;    template class distributeErfParameters<CV_64S, CV_16S>;
+    template class distributeErfParameters<CV_64U, CV_32U>;    template class distributeErfParameters<CV_64S, CV_32U>;
+    template class distributeErfParameters<CV_64U, CV_32S>;    template class distributeErfParameters<CV_64S, CV_32S>;
+    template class distributeErfParameters<CV_64U, CV_64U>;    template class distributeErfParameters<CV_64S, CV_64U>;
+    template class distributeErfParameters<CV_64U, CV_64S>;    template class distributeErfParameters<CV_64S, CV_64S>;
+    
+
+        
+template<int src_t, int dst_t> distributeErf<src_t, dst_t>::distributeErf(){};
+template<int src_t, int dst_t> distributeErf<src_t, dst_t>::distributeErf(distributeErfParameters<src_t, dst_t> _par):par(_par){};
+    
+template<int src_t, int dst_t> distributeErf<src_t, dst_t>::distributeErf(double _g, typename distributeErf::srcType _c, typename distributeErf::srcType sMin, typename distributeErf::srcType sMax, typename distributeErf::dstType dMin, typename distributeErf::dstType dMax):par(_g,double(_c),sMin,sMax,dMin,dMax)
+    {
+        CV_Assert((int)sMin <= (int)_c && (int)_c <= (int)sMax && (int)dMin <= (int)dMax);
+    };
+    
+template<int src_t, int dst_t>  void distributeErf<src_t, dst_t>::operator()(const typename distributeErf::srcType src, typename distributeErf::dstType &dst)
+    {
+        // ErfDistribution
+        //
+        //         = disMin;                                                   x <= lambda1
+        // pDis(x) = disScale * erf( g * (x - c) ) + disConstant;   lambda1 <  x <  lambda2
+        //         = disMax;                                        lambda1 <= x
+        //
+        if(src <= par.Lambda[0]){
+            dst = par.dMin;
+        } else if (src >= par.Lambda[1]){
+            dst = par.dMax;
+        } else {
+            if(src >= par.c){
+                dst = par.disConstant + dstType(par.disScale * erf(par.g*(src - par.c)));
+            }else{
+                dst = par.disConstant - dstType(par.disScale * erf(par.g*(par.c - src)));
+            };
+        }
+    };
+    
+    template class distributeErf<CV_8U, CV_8U>;      template class distributeErf<CV_8S, CV_8U>;
+    template class distributeErf<CV_8U, CV_8S>;      template class distributeErf<CV_8S, CV_8S>;
+    template class distributeErf<CV_8U, CV_16U>;     template class distributeErf<CV_8S, CV_16U>;
+    template class distributeErf<CV_8U, CV_16S>;     template class distributeErf<CV_8S, CV_16S>;
+    template class distributeErf<CV_8U, CV_32U>;     template class distributeErf<CV_8S, CV_32U>;
+    template class distributeErf<CV_8U, CV_32S>;     template class distributeErf<CV_8S, CV_32S>;
+    template class distributeErf<CV_8U, CV_64U>;     template class distributeErf<CV_8S, CV_64U>;
+    template class distributeErf<CV_8U, CV_64S>;     template class distributeErf<CV_8S, CV_64S>;
+    
+    template class distributeErf<CV_16U, CV_8U>;     template class distributeErf<CV_16S, CV_8U>;
+    template class distributeErf<CV_16U, CV_8S>;     template class distributeErf<CV_16S, CV_8S>;
+    template class distributeErf<CV_16U, CV_16U>;    template class distributeErf<CV_16S, CV_16U>;
+    template class distributeErf<CV_16U, CV_16S>;    template class distributeErf<CV_16S, CV_16S>;
+    template class distributeErf<CV_16U, CV_32U>;    template class distributeErf<CV_16S, CV_32U>;
+    template class distributeErf<CV_16U, CV_32S>;    template class distributeErf<CV_16S, CV_32S>;
+    template class distributeErf<CV_16U, CV_64U>;    template class distributeErf<CV_16S, CV_64U>;
+    template class distributeErf<CV_16U, CV_64S>;    template class distributeErf<CV_16S, CV_64S>;
+    
+    template class distributeErf<CV_32U, CV_8U>;     template class distributeErf<CV_32S, CV_8U>;
+    template class distributeErf<CV_32U, CV_8S>;     template class distributeErf<CV_32S, CV_8S>;
+    template class distributeErf<CV_32U, CV_16U>;    template class distributeErf<CV_32S, CV_16U>;
+    template class distributeErf<CV_32U, CV_16S>;    template class distributeErf<CV_32S, CV_16S>;
+    template class distributeErf<CV_32U, CV_32U>;    template class distributeErf<CV_32S, CV_32U>;
+    template class distributeErf<CV_32U, CV_32S>;    template class distributeErf<CV_32S, CV_32S>;
+    template class distributeErf<CV_32U, CV_64U>;    template class distributeErf<CV_32S, CV_64U>;
+    template class distributeErf<CV_32U, CV_64S>;    template class distributeErf<CV_32S, CV_64S>;
+    
+    template class distributeErf<CV_64U, CV_8U>;     template class distributeErf<CV_64S, CV_8U>;
+    template class distributeErf<CV_64U, CV_8S>;     template class distributeErf<CV_64S, CV_8S>;
+    template class distributeErf<CV_64U, CV_16U>;    template class distributeErf<CV_64S, CV_16U>;
+    template class distributeErf<CV_64U, CV_16S>;    template class distributeErf<CV_64S, CV_16S>;
+    template class distributeErf<CV_64U, CV_32U>;    template class distributeErf<CV_64S, CV_32U>;
+    template class distributeErf<CV_64U, CV_32S>;    template class distributeErf<CV_64S, CV_32S>;
+    template class distributeErf<CV_64U, CV_64U>;    template class distributeErf<CV_64S, CV_64U>;
+    template class distributeErf<CV_64U, CV_64S>;    template class distributeErf<CV_64S, CV_64S>;
+    
+
+    
+    
+    template<int src_t, int dst_t, int wrk_t> distributeErfScaled<src_t, dst_t, wrk_t>::distributeErfScaled(){};
+    template<int src_t, int dst_t, int wrk_t> distributeErfScaled<src_t, dst_t, wrk_t>::distributeErfScaled(distributeErfParameters<src_t, dst_t> _par, double _scale, double _qRange, double _qMin):scale(_scale), qRange(_qRange), qMin(_qMin), par(_par){
+        qLambda1 = par.uLambda1 * qRange + qMin;
+        qLambda2 = par.uLambda2 * qRange + qMin;
+        qOmega1  = par.uOmegaP1 * qRange + qMin;
+        qOmega2  = par.uOmegaP2 * qRange + qMin;
+        qC = par.uC * qRange + qMin;
+    };
+    
+    template<int src_t, int dst_t, int wrk_t>  void distributeErfScaled<src_t, dst_t, wrk_t>::operator()(const typename distributeErfScaled::srcType src, typename distributeErfScaled::dstType &dst)
+    {
+        // ErfDistribution
+        //
+        //         = disMin;                                                                                    sMin    <= x <= lambda1 * qRange + qMin
+        // pDis(x) = disScale * erf( g * (scale *x - c) ) + disConstant;                        lambda1 * qRange + qMin <  x <  uC * qRange + qMin
+        //         = disScale * erf( g * (scale *x - c) ) + disConstant + shiftednErfConstant;       uC * qRange + qMin <  x <  lambda2 * qRange + qMin
+        //         = disMax;                                                                    lambda2 * qRange + qMin <= x <= sMax
+        
+        if(src <= qLambda1){
+            dst = par.disMin;                                                                      //   sMin    <= x <= lambda1
+        } else if (src >= qLambda2){
+            dst = par.disMax;                                                                      //   lambda2 <= x <= sMax
+        } else {
+            if(src <= qC){
+                dst = dstType(par.disConstant - par.disScale * erf(par.g*(par.c - scale * src)) ); //   lambda1 <  x <  omegaP1
+            } else {
+                dst = dstType(par.disConstant + par.disScale * erf(par.g*(scale * src - par.c)) ); //   omegaP2 <  x <  lambda2
+            }
+        }
+    };
+    
+    
+    template class distributeErfScaled<CV_8U, CV_8U,  CV_16S>;     template class distributeErfScaled<CV_8S, CV_8U,  CV_16S>;
+    template class distributeErfScaled<CV_8U, CV_8S,  CV_16S>;     template class distributeErfScaled<CV_8S, CV_8S,  CV_16S>;
+    template class distributeErfScaled<CV_8U, CV_16U, CV_16S>;     template class distributeErfScaled<CV_8S, CV_16U, CV_16S>;
+    template class distributeErfScaled<CV_8U, CV_16S, CV_16S>;     template class distributeErfScaled<CV_8S, CV_16S, CV_16S>;
+    template class distributeErfScaled<CV_8U, CV_32U, CV_16S>;     template class distributeErfScaled<CV_8S, CV_32U, CV_16S>;
+    template class distributeErfScaled<CV_8U, CV_32S, CV_16S>;     template class distributeErfScaled<CV_8S, CV_32S, CV_16S>;
+    template class distributeErfScaled<CV_8U, CV_64U, CV_16S>;     template class distributeErfScaled<CV_8S, CV_64U, CV_16S>;
+    template class distributeErfScaled<CV_8U, CV_64S, CV_16S>;     template class distributeErfScaled<CV_8S, CV_64S, CV_16S>;
+    
+    template class distributeErfScaled<CV_16U, CV_8U,  CV_32S>;    template class distributeErfScaled<CV_16S, CV_8U,  CV_32S>;
+    template class distributeErfScaled<CV_16U, CV_8S,  CV_32S>;    template class distributeErfScaled<CV_16S, CV_8S,  CV_32S>;
+    template class distributeErfScaled<CV_16U, CV_16U, CV_32S>;    template class distributeErfScaled<CV_16S, CV_16U, CV_32S>;
+    template class distributeErfScaled<CV_16U, CV_16S, CV_32S>;    template class distributeErfScaled<CV_16S, CV_16S, CV_32S>;
+    template class distributeErfScaled<CV_16U, CV_32U, CV_32S>;    template class distributeErfScaled<CV_16S, CV_32U, CV_32S>;
+    template class distributeErfScaled<CV_16U, CV_32S, CV_32S>;    template class distributeErfScaled<CV_16S, CV_32S, CV_32S>;
+    template class distributeErfScaled<CV_16U, CV_64U, CV_32S>;    template class distributeErfScaled<CV_16S, CV_64U, CV_32S>;
+    template class distributeErfScaled<CV_16U, CV_64S, CV_32S>;    template class distributeErfScaled<CV_16S, CV_64S, CV_32S>;
+    
+    template class distributeErfScaled<CV_32U, CV_8U,  CV_64S>;    template class distributeErfScaled<CV_32S, CV_8U,  CV_64S>;
+    template class distributeErfScaled<CV_32U, CV_8S,  CV_64S>;    template class distributeErfScaled<CV_32S, CV_8S,  CV_64S>;
+    template class distributeErfScaled<CV_32U, CV_16U, CV_64S>;    template class distributeErfScaled<CV_32S, CV_16U, CV_64S>;
+    template class distributeErfScaled<CV_32U, CV_16S, CV_64S>;    template class distributeErfScaled<CV_32S, CV_16S, CV_64S>;
+    template class distributeErfScaled<CV_32U, CV_32U, CV_64S>;    template class distributeErfScaled<CV_32S, CV_32U, CV_64S>;
+    template class distributeErfScaled<CV_32U, CV_32S, CV_64S>;    template class distributeErfScaled<CV_32S, CV_32S, CV_64S>;
+    template class distributeErfScaled<CV_32U, CV_64U, CV_64S>;    template class distributeErfScaled<CV_32S, CV_64U, CV_64S>;
+    template class distributeErfScaled<CV_32U, CV_64S, CV_64S>;    template class distributeErfScaled<CV_32S, CV_64S, CV_64S>;
+
+    
+    
+    
+    template<int src_t, int dst_t> distributePartition<src_t, dst_t>::distributePartition(){};
+    template<int src_t, int dst_t> distributePartition<src_t, dst_t>::distributePartition(distributeErfParameters<src_t, dst_t> _par):par(_par){ };
+    template<int src_t, int dst_t> distributePartition<src_t, dst_t>::distributePartition(double _g, typename distributePartition::srcType _c, typename distributePartition::srcType sMin, typename distributePartition::srcType sMax, typename distributePartition::dstType dMin, typename distributePartition::dstType dMax):par(_g,double(_c),sMin,sMax,dMin,dMax)
+    {
+        CV_Assert((int)sMin <= (int)_c && (int)_c <= (int)sMax && (int)dMin <= (int)dMax);
+    };
+    
+    template<int src_t, int dst_t>  void distributePartition<src_t, dst_t>::operator()(const typename distributePartition::srcType src, typename distributePartition::dstType &dst)
+    {
+        // PartitionDistribution
+        //
+        //         = disMin;                          x <  lambda1
+        // pDis(x) = x - linearConstant;   lambda1 <= x <= lambda2
+        //         = disMax;               lambda1 <  x
+        if(src <= par.Lambda[0]){
+            dst = par.disMin;               //   sMin    <= x <= lambda1
+        } else if (src >= par.Lambda[1]){
+            dst = par.disMax;               //   lambda1 <= x <= sMax
+        } else {
+            dst = src - par.linearConstant; //   omegaP1 <  x <  omegaP2
+        }
+    };
+    
+    template class distributePartition<CV_8U, CV_8U>;      template class distributePartition<CV_8S, CV_8U>;
+    template class distributePartition<CV_8U, CV_8S>;      template class distributePartition<CV_8S, CV_8S>;
+    template class distributePartition<CV_8U, CV_16U>;     template class distributePartition<CV_8S, CV_16U>;
+    template class distributePartition<CV_8U, CV_16S>;     template class distributePartition<CV_8S, CV_16S>;
+    template class distributePartition<CV_8U, CV_32U>;     template class distributePartition<CV_8S, CV_32U>;
+    template class distributePartition<CV_8U, CV_32S>;     template class distributePartition<CV_8S, CV_32S>;
+    template class distributePartition<CV_8U, CV_64U>;     template class distributePartition<CV_8S, CV_64U>;
+    template class distributePartition<CV_8U, CV_64S>;     template class distributePartition<CV_8S, CV_64S>;
+    
+    template class distributePartition<CV_16U, CV_8U>;     template class distributePartition<CV_16S, CV_8U>;
+    template class distributePartition<CV_16U, CV_8S>;     template class distributePartition<CV_16S, CV_8S>;
+    template class distributePartition<CV_16U, CV_16U>;    template class distributePartition<CV_16S, CV_16U>;
+    template class distributePartition<CV_16U, CV_16S>;    template class distributePartition<CV_16S, CV_16S>;
+    template class distributePartition<CV_16U, CV_32U>;    template class distributePartition<CV_16S, CV_32U>;
+    template class distributePartition<CV_16U, CV_32S>;    template class distributePartition<CV_16S, CV_32S>;
+    template class distributePartition<CV_16U, CV_64U>;    template class distributePartition<CV_16S, CV_64U>;
+    template class distributePartition<CV_16U, CV_64S>;    template class distributePartition<CV_16S, CV_64S>;
+    
+    template class distributePartition<CV_32U, CV_8U>;     template class distributePartition<CV_32S, CV_8U>;
+    template class distributePartition<CV_32U, CV_8S>;     template class distributePartition<CV_32S, CV_8S>;
+    template class distributePartition<CV_32U, CV_16U>;    template class distributePartition<CV_32S, CV_16U>;
+    template class distributePartition<CV_32U, CV_16S>;    template class distributePartition<CV_32S, CV_16S>;
+    template class distributePartition<CV_32U, CV_32U>;    template class distributePartition<CV_32S, CV_32U>;
+    template class distributePartition<CV_32U, CV_32S>;    template class distributePartition<CV_32S, CV_32S>;
+    template class distributePartition<CV_32U, CV_64U>;    template class distributePartition<CV_32S, CV_64U>;
+    template class distributePartition<CV_32U, CV_64S>;    template class distributePartition<CV_32S, CV_64S>;
+    
+    template class distributePartition<CV_64U, CV_8U>;     template class distributePartition<CV_64S, CV_8U>;
+    template class distributePartition<CV_64U, CV_8S>;     template class distributePartition<CV_64S, CV_8S>;
+    template class distributePartition<CV_64U, CV_16U>;    template class distributePartition<CV_64S, CV_16U>;
+    template class distributePartition<CV_64U, CV_16S>;    template class distributePartition<CV_64S, CV_16S>;
+    template class distributePartition<CV_64U, CV_32U>;    template class distributePartition<CV_64S, CV_32U>;
+    template class distributePartition<CV_64U, CV_32S>;    template class distributePartition<CV_64S, CV_32S>;
+    template class distributePartition<CV_64U, CV_64U>;    template class distributePartition<CV_64S, CV_64U>;
+    template class distributePartition<CV_64U, CV_64S>;    template class distributePartition<CV_64S, CV_64S>;
+
+    
+    
+    template<int src_t, int dst_t, int wrk_t> distributePartitionScaled<src_t, dst_t, wrk_t>::distributePartitionScaled(){};
+    template<int src_t, int dst_t, int wrk_t> distributePartitionScaled<src_t, dst_t, wrk_t>::distributePartitionScaled(distributeErfParameters<src_t, dst_t> _par, double _scale, double _qRange, double _qMin):scale(_scale), qRange(_qRange), qMin(_qMin), par(_par){
+        qLambda1 = par.uLambda1 * qRange + qMin;
+        qLambda2 = par.uLambda2 * qRange + qMin;
+        qOmega1  = par.uOmegaP1 * qRange + qMin;
+        qOmega2  = par.uOmegaP2 * qRange + qMin;
+
+    };
+    
+    template<int src_t, int dst_t, int wrk_t>  void distributePartitionScaled<src_t, dst_t, wrk_t>::operator()(const typename distributePartitionScaled::srcType src, typename distributePartitionScaled::dstType &dst)
+    {
+        // PartitionDistribution
+        //
+        //         = disMin;                                                                                    sMin    <= x <= lambda1 * qRange + qMin
+        // pDis(x) = scale * x - linearConstant;                                                omegaP1 * qRange + qMin <= x <= omegaP2 * qRange + qMin
+        //         = disMax;                                                                    lambda2 * qRange + qMin <= x <= sMax
+        
+        if(src <= qLambda1){
+            dst = par.disMin;                       //                   sMin    <= x <= lambda1 * qRange + qMin
+        } else if (src >= qLambda2){
+            dst = par.disMax;                       //   lambda2 * qRange + qMin <= x <= sMax
+        } else {
+            dst = scale * src - par.linearConstant; //   lambda1 * qRange + qMin <= x <= lambda2 * qRange + qMin
+        }
+    };
+    
+    template class distributePartitionScaled<CV_8U, CV_8U,  CV_16S>;     template class distributePartitionScaled<CV_8S, CV_8U,  CV_16S>;
+    template class distributePartitionScaled<CV_8U, CV_8S,  CV_16S>;     template class distributePartitionScaled<CV_8S, CV_8S,  CV_16S>;
+    template class distributePartitionScaled<CV_8U, CV_16U, CV_16S>;     template class distributePartitionScaled<CV_8S, CV_16U, CV_16S>;
+    template class distributePartitionScaled<CV_8U, CV_16S, CV_16S>;     template class distributePartitionScaled<CV_8S, CV_16S, CV_16S>;
+    template class distributePartitionScaled<CV_8U, CV_32U, CV_16S>;     template class distributePartitionScaled<CV_8S, CV_32U, CV_16S>;
+    template class distributePartitionScaled<CV_8U, CV_32S, CV_16S>;     template class distributePartitionScaled<CV_8S, CV_32S, CV_16S>;
+    template class distributePartitionScaled<CV_8U, CV_64U, CV_16S>;     template class distributePartitionScaled<CV_8S, CV_64U, CV_16S>;
+    template class distributePartitionScaled<CV_8U, CV_64S, CV_16S>;     template class distributePartitionScaled<CV_8S, CV_64S, CV_16S>;
+    
+    template class distributePartitionScaled<CV_16U, CV_8U,  CV_32S>;    template class distributePartitionScaled<CV_16S, CV_8U,  CV_32S>;
+    template class distributePartitionScaled<CV_16U, CV_8S,  CV_32S>;    template class distributePartitionScaled<CV_16S, CV_8S,  CV_32S>;
+    template class distributePartitionScaled<CV_16U, CV_16U, CV_32S>;    template class distributePartitionScaled<CV_16S, CV_16U, CV_32S>;
+    template class distributePartitionScaled<CV_16U, CV_16S, CV_32S>;    template class distributePartitionScaled<CV_16S, CV_16S, CV_32S>;
+    template class distributePartitionScaled<CV_16U, CV_32U, CV_32S>;    template class distributePartitionScaled<CV_16S, CV_32U, CV_32S>;
+    template class distributePartitionScaled<CV_16U, CV_32S, CV_32S>;    template class distributePartitionScaled<CV_16S, CV_32S, CV_32S>;
+    template class distributePartitionScaled<CV_16U, CV_64U, CV_32S>;    template class distributePartitionScaled<CV_16S, CV_64U, CV_32S>;
+    template class distributePartitionScaled<CV_16U, CV_64S, CV_32S>;    template class distributePartitionScaled<CV_16S, CV_64S, CV_32S>;
+    
+    template class distributePartitionScaled<CV_32U, CV_8U,  CV_64S>;    template class distributePartitionScaled<CV_32S, CV_8U,  CV_64S>;
+    template class distributePartitionScaled<CV_32U, CV_8S,  CV_64S>;    template class distributePartitionScaled<CV_32S, CV_8S,  CV_64S>;
+    template class distributePartitionScaled<CV_32U, CV_16U, CV_64S>;    template class distributePartitionScaled<CV_32S, CV_16U, CV_64S>;
+    template class distributePartitionScaled<CV_32U, CV_16S, CV_64S>;    template class distributePartitionScaled<CV_32S, CV_16S, CV_64S>;
+    template class distributePartitionScaled<CV_32U, CV_32U, CV_64S>;    template class distributePartitionScaled<CV_32S, CV_32U, CV_64S>;
+    template class distributePartitionScaled<CV_32U, CV_32S, CV_64S>;    template class distributePartitionScaled<CV_32S, CV_32S, CV_64S>;
+    template class distributePartitionScaled<CV_32U, CV_64U, CV_64S>;    template class distributePartitionScaled<CV_32S, CV_64U, CV_64S>;
+    template class distributePartitionScaled<CV_32U, CV_64S, CV_64S>;    template class distributePartitionScaled<CV_32S, CV_64S, CV_64S>;
+
+
+    
+template<int src_t, int dst_t> distributeStep<src_t, dst_t>::distributeStep(){ };
+template<int src_t, int dst_t> distributeStep<src_t, dst_t>::distributeStep(distributeErfParameters<src_t, dst_t> _par):par(_par){ };
+template<int src_t, int dst_t> distributeStep<src_t, dst_t>::distributeStep(double _g, typename distributeStep::srcType _c, typename distributeStep::srcType sMin, typename distributeStep::srcType sMax, typename distributeStep::dstType dMin, typename distributeStep::dstType dMax):par(_g,double(_c),sMin,sMax,dMin,dMax)
+{
+    CV_Assert((int)sMin <= (int)_c && (int)_c <= (int)sMax && (int)dMin <= (int)dMax);
+};
+
+template<int src_t, int dst_t>  void distributeStep<src_t, dst_t>::operator()(const typename distributeStep::srcType src, typename distributeStep::dstType &dst)
+{
+    // StepDistribution
+    //
+    // pDis(x) = disMin;       x <= (lambda1+lambda2)/2
+    //         = disMax;       x >  (lambda1+lambda2)/2
+    //
+    if(src <= par.Omega[0]){
+        dst = par.disMin;
+    } else {
+        dst = par.disMax;
+    };
+};
+    
+    
+    template class distributeStep<CV_8U, CV_8U>;      template class distributeStep<CV_8S, CV_8U>;
+    template class distributeStep<CV_8U, CV_8S>;      template class distributeStep<CV_8S, CV_8S>;
+    template class distributeStep<CV_8U, CV_16U>;     template class distributeStep<CV_8S, CV_16U>;
+    template class distributeStep<CV_8U, CV_16S>;     template class distributeStep<CV_8S, CV_16S>;
+    template class distributeStep<CV_8U, CV_32U>;     template class distributeStep<CV_8S, CV_32U>;
+    template class distributeStep<CV_8U, CV_32S>;     template class distributeStep<CV_8S, CV_32S>;
+    template class distributeStep<CV_8U, CV_64U>;     template class distributeStep<CV_8S, CV_64U>;
+    template class distributeStep<CV_8U, CV_64S>;     template class distributeStep<CV_8S, CV_64S>;
+    
+    template class distributeStep<CV_16U, CV_8U>;     template class distributeStep<CV_16S, CV_8U>;
+    template class distributeStep<CV_16U, CV_8S>;     template class distributeStep<CV_16S, CV_8S>;
+    template class distributeStep<CV_16U, CV_16U>;    template class distributeStep<CV_16S, CV_16U>;
+    template class distributeStep<CV_16U, CV_16S>;    template class distributeStep<CV_16S, CV_16S>;
+    template class distributeStep<CV_16U, CV_32U>;    template class distributeStep<CV_16S, CV_32U>;
+    template class distributeStep<CV_16U, CV_32S>;    template class distributeStep<CV_16S, CV_32S>;
+    template class distributeStep<CV_16U, CV_64U>;    template class distributeStep<CV_16S, CV_64U>;
+    template class distributeStep<CV_16U, CV_64S>;    template class distributeStep<CV_16S, CV_64S>;
+    
+    template class distributeStep<CV_32U, CV_8U>;     template class distributeStep<CV_32S, CV_8U>;
+    template class distributeStep<CV_32U, CV_8S>;     template class distributeStep<CV_32S, CV_8S>;
+    template class distributeStep<CV_32U, CV_16U>;    template class distributeStep<CV_32S, CV_16U>;
+    template class distributeStep<CV_32U, CV_16S>;    template class distributeStep<CV_32S, CV_16S>;
+    template class distributeStep<CV_32U, CV_32U>;    template class distributeStep<CV_32S, CV_32U>;
+    template class distributeStep<CV_32U, CV_32S>;    template class distributeStep<CV_32S, CV_32S>;
+    template class distributeStep<CV_32U, CV_64U>;    template class distributeStep<CV_32S, CV_64U>;
+    template class distributeStep<CV_32U, CV_64S>;    template class distributeStep<CV_32S, CV_64S>;
+    
+    template class distributeStep<CV_64U, CV_8U>;     template class distributeStep<CV_64S, CV_8U>;
+    template class distributeStep<CV_64U, CV_8S>;     template class distributeStep<CV_64S, CV_8S>;
+    template class distributeStep<CV_64U, CV_16U>;    template class distributeStep<CV_64S, CV_16U>;
+    template class distributeStep<CV_64U, CV_16S>;    template class distributeStep<CV_64S, CV_16S>;
+    template class distributeStep<CV_64U, CV_32U>;    template class distributeStep<CV_64S, CV_32U>;
+    template class distributeStep<CV_64U, CV_32S>;    template class distributeStep<CV_64S, CV_32S>;
+    template class distributeStep<CV_64U, CV_64U>;    template class distributeStep<CV_64S, CV_64U>;
+    template class distributeStep<CV_64U, CV_64S>;    template class distributeStep<CV_64S, CV_64S>;
+    
+
+    
+    template<int src_t, int dst_t, int wrk_t> distributeStepScaled<src_t, dst_t, wrk_t>::distributeStepScaled(){};
+    template<int src_t, int dst_t, int wrk_t> distributeStepScaled<src_t, dst_t, wrk_t>::distributeStepScaled(distributeErfParameters<src_t, dst_t> _par, double _scale, double _qRange, double _qMin):scale(_scale), qRange(_qRange), qMin(_qMin), par(_par){
+        qLambda1 = par.uLambda1 * qRange + qMin;
+        qLambda2 = par.uLambda2 * qRange + qMin;
+        qOmega1  = par.uOmegaP1 * qRange + qMin;
+        qOmega2  = par.uOmegaP2 * qRange + qMin;
+    };
+    
+    template<int src_t, int dst_t, int wrk_t>  void distributeStepScaled<src_t, dst_t, wrk_t>::operator()(const typename distributeStepScaled::srcType src, typename distributeStepScaled::dstType &dst)
+    {
+        // StepDistribution
+        //
+        // pDis(x) = disMin;       x <= (lambda1+lambda2)/2
+        //         = disMax;       x >  (lambda1+lambda2)/2
+        //
+        if(src <= qOmega1){
+            dst = par.disMin;                                                                                       //   sMin    <= x <= lambda1
+        } else {
+            dst = par.disMax;                                                                                       //   lambda1 <= x <= sMax
+        }
+    };
+    
+    
+    template class distributeStepScaled<CV_8U, CV_8U,  CV_16S>;     template class distributeStepScaled<CV_8S, CV_8U,  CV_16S>;
+    template class distributeStepScaled<CV_8U, CV_8S,  CV_16S>;     template class distributeStepScaled<CV_8S, CV_8S,  CV_16S>;
+    template class distributeStepScaled<CV_8U, CV_16U, CV_16S>;     template class distributeStepScaled<CV_8S, CV_16U, CV_16S>;
+    template class distributeStepScaled<CV_8U, CV_16S, CV_16S>;     template class distributeStepScaled<CV_8S, CV_16S, CV_16S>;
+    template class distributeStepScaled<CV_8U, CV_32U, CV_16S>;     template class distributeStepScaled<CV_8S, CV_32U, CV_16S>;
+    template class distributeStepScaled<CV_8U, CV_32S, CV_16S>;     template class distributeStepScaled<CV_8S, CV_32S, CV_16S>;
+    template class distributeStepScaled<CV_8U, CV_64U, CV_16S>;     template class distributeStepScaled<CV_8S, CV_64U, CV_16S>;
+    template class distributeStepScaled<CV_8U, CV_64S, CV_16S>;     template class distributeStepScaled<CV_8S, CV_64S, CV_16S>;
+    
+    template class distributeStepScaled<CV_16U, CV_8U,  CV_32S>;    template class distributeStepScaled<CV_16S, CV_8U,  CV_32S>;
+    template class distributeStepScaled<CV_16U, CV_8S,  CV_32S>;    template class distributeStepScaled<CV_16S, CV_8S,  CV_32S>;
+    template class distributeStepScaled<CV_16U, CV_16U, CV_32S>;    template class distributeStepScaled<CV_16S, CV_16U, CV_32S>;
+    template class distributeStepScaled<CV_16U, CV_16S, CV_32S>;    template class distributeStepScaled<CV_16S, CV_16S, CV_32S>;
+    template class distributeStepScaled<CV_16U, CV_32U, CV_32S>;    template class distributeStepScaled<CV_16S, CV_32U, CV_32S>;
+    template class distributeStepScaled<CV_16U, CV_32S, CV_32S>;    template class distributeStepScaled<CV_16S, CV_32S, CV_32S>;
+    template class distributeStepScaled<CV_16U, CV_64U, CV_32S>;    template class distributeStepScaled<CV_16S, CV_64U, CV_32S>;
+    template class distributeStepScaled<CV_16U, CV_64S, CV_32S>;    template class distributeStepScaled<CV_16S, CV_64S, CV_32S>;
+    
+    template class distributeStepScaled<CV_32U, CV_8U,  CV_64S>;    template class distributeStepScaled<CV_32S, CV_8U,  CV_64S>;
+    template class distributeStepScaled<CV_32U, CV_8S,  CV_64S>;    template class distributeStepScaled<CV_32S, CV_8S,  CV_64S>;
+    template class distributeStepScaled<CV_32U, CV_16U, CV_64S>;    template class distributeStepScaled<CV_32S, CV_16U, CV_64S>;
+    template class distributeStepScaled<CV_32U, CV_16S, CV_64S>;    template class distributeStepScaled<CV_32S, CV_16S, CV_64S>;
+    template class distributeStepScaled<CV_32U, CV_32U, CV_64S>;    template class distributeStepScaled<CV_32S, CV_32U, CV_64S>;
+    template class distributeStepScaled<CV_32U, CV_32S, CV_64S>;    template class distributeStepScaled<CV_32S, CV_32S, CV_64S>;
+    template class distributeStepScaled<CV_32U, CV_64U, CV_64S>;    template class distributeStepScaled<CV_32S, CV_64U, CV_64S>;
+    template class distributeStepScaled<CV_32U, CV_64S, CV_64S>;    template class distributeStepScaled<CV_32S, CV_64S, CV_64S>;
+
+    
+template<int src_t, int dst_t> distributeErfCompact<src_t, dst_t>::distributeErfCompact(){};
+template<int src_t, int dst_t> distributeErfCompact<src_t, dst_t>::distributeErfCompact(distributeErfParameters<src_t, dst_t> _par):par(_par){};
+template<int src_t, int dst_t> distributeErfCompact<src_t, dst_t>::distributeErfCompact(double _g, typename distributeErfCompact::srcType _c, typename distributeErfCompact::srcType sMin, typename distributeErfCompact::srcType sMax, typename distributeErfCompact::dstType dMin, typename distributeErfCompact::dstType dMax): par(_g,_c,sMin,sMax,dMin,dMax)
+    {
+        CV_Assert((int)sMin <= (int)_c && (int)_c <= (int)sMax && (int)dMin <= (int)dMax);    };
+    
+template<int src_t, int dst_t>  void distributeErfCompact<src_t, dst_t>::operator()(const typename distributeErfCompact::srcType src, typename distributeErfCompact::dstType &dst)
+    {
+        // 5 Region code : constant - erf - linear - erf - constant
+        // Assumes that c is in the linear region.
+        //
+        // CompactErfDistribution
+        //
+        //         = disMin;                                                            sMin    <= x <= lambda1
+        //         = disScale * erf( g * (x - c) ) + disConstant;                       lambda1 <  x <  omegaP1
+        // pDis(x) = x - linearConstant;                                                omegaP1 <= x <= omegaP2
+        //         = disScale * erf( g * (x - c) ) + disConstant + shiftednErfConstant; omegaP2 <  x <  lambda2
+        //         = disMax;                                                            lambda1 <= x <= sMax
+        
+        if(src <= par.Lambda[0]){
+            dst = par.disMin;                                                                                       //   sMin    <= x <= lambda1
+        } else if (src >= par.Lambda[1]){
+            dst = par.disMax;                                                                                       //   lambda1 <= x <= sMax
+        } else {
+            if(src <= par.Omega[0]){
+                dst = dstType(par.disConstant - par.disScale * erf(par.g*(par.c - src)));                           //   lambda1 <  x <  omegaP1
+            } else if (src >= par.Omega[1]){
+                dst = dstType(par.disConstant + par.disScale * erf(par.g*(src - par.c)) + par.shiftednErfConstant); //   omegaP2 <  x <  lambda2
+            } else {
+                dst = src - par.linearConstant;                                                                     //   omegaP1 <  x <  omegaP2
+            }
+        }
+    };
+    
+template class distributeErfCompact<CV_8U, CV_8U>;      template class distributeErfCompact<CV_8S, CV_8U>;
+template class distributeErfCompact<CV_8U, CV_8S>;      template class distributeErfCompact<CV_8S, CV_8S>;
+template class distributeErfCompact<CV_8U, CV_16U>;     template class distributeErfCompact<CV_8S, CV_16U>;
+template class distributeErfCompact<CV_8U, CV_16S>;     template class distributeErfCompact<CV_8S, CV_16S>;
+template class distributeErfCompact<CV_8U, CV_32U>;     template class distributeErfCompact<CV_8S, CV_32U>;
+template class distributeErfCompact<CV_8U, CV_32S>;     template class distributeErfCompact<CV_8S, CV_32S>;
+template class distributeErfCompact<CV_8U, CV_64U>;     template class distributeErfCompact<CV_8S, CV_64U>;
+template class distributeErfCompact<CV_8U, CV_64S>;     template class distributeErfCompact<CV_8S, CV_64S>;
+
+template class distributeErfCompact<CV_16U, CV_8U>;     template class distributeErfCompact<CV_16S, CV_8U>;
+template class distributeErfCompact<CV_16U, CV_8S>;     template class distributeErfCompact<CV_16S, CV_8S>;
+template class distributeErfCompact<CV_16U, CV_16U>;    template class distributeErfCompact<CV_16S, CV_16U>;
+template class distributeErfCompact<CV_16U, CV_16S>;    template class distributeErfCompact<CV_16S, CV_16S>;
+template class distributeErfCompact<CV_16U, CV_32U>;    template class distributeErfCompact<CV_16S, CV_32U>;
+template class distributeErfCompact<CV_16U, CV_32S>;    template class distributeErfCompact<CV_16S, CV_32S>;
+template class distributeErfCompact<CV_16U, CV_64U>;    template class distributeErfCompact<CV_16S, CV_64U>;
+template class distributeErfCompact<CV_16U, CV_64S>;    template class distributeErfCompact<CV_16S, CV_64S>;
+
+template class distributeErfCompact<CV_32U, CV_8U>;     template class distributeErfCompact<CV_32S, CV_8U>;
+template class distributeErfCompact<CV_32U, CV_8S>;     template class distributeErfCompact<CV_32S, CV_8S>;
+template class distributeErfCompact<CV_32U, CV_16U>;    template class distributeErfCompact<CV_32S, CV_16U>;
+template class distributeErfCompact<CV_32U, CV_16S>;    template class distributeErfCompact<CV_32S, CV_16S>;
+template class distributeErfCompact<CV_32U, CV_32U>;    template class distributeErfCompact<CV_32S, CV_32U>;
+template class distributeErfCompact<CV_32U, CV_32S>;    template class distributeErfCompact<CV_32S, CV_32S>;
+template class distributeErfCompact<CV_32U, CV_64U>;    template class distributeErfCompact<CV_32S, CV_64U>;
+template class distributeErfCompact<CV_32U, CV_64S>;    template class distributeErfCompact<CV_32S, CV_64S>;
+
+template class distributeErfCompact<CV_64U, CV_8U>;     template class distributeErfCompact<CV_64S, CV_8U>;
+template class distributeErfCompact<CV_64U, CV_8S>;     template class distributeErfCompact<CV_64S, CV_8S>;
+template class distributeErfCompact<CV_64U, CV_16U>;    template class distributeErfCompact<CV_64S, CV_16U>;
+template class distributeErfCompact<CV_64U, CV_16S>;    template class distributeErfCompact<CV_64S, CV_16S>;
+template class distributeErfCompact<CV_64U, CV_32U>;    template class distributeErfCompact<CV_64S, CV_32U>;
+template class distributeErfCompact<CV_64U, CV_32S>;    template class distributeErfCompact<CV_64S, CV_32S>;
+template class distributeErfCompact<CV_64U, CV_64U>;    template class distributeErfCompact<CV_64S, CV_64U>;
+template class distributeErfCompact<CV_64U, CV_64S>;    template class distributeErfCompact<CV_64S, CV_64S>;
+    
+    
+template<int src_t, int dst_t, int wrk_t> distributeErfCompactScaled<src_t, dst_t, wrk_t>::distributeErfCompactScaled(){};
+template<int src_t, int dst_t, int wrk_t> distributeErfCompactScaled<src_t, dst_t, wrk_t>::distributeErfCompactScaled(distributeErfParameters<src_t, dst_t> _par, double _scale, double _qRange, double _qMin):scale(_scale), qRange(_qRange), qMin(_qMin), par(_par){
+    qLambda1 = par.uLambda1 * qRange + qMin;
+    qLambda2 = par.uLambda2 * qRange + qMin;
+    qOmega1  = par.uOmegaP1 * qRange + qMin;
+    qOmega2  = par.uOmegaP2 * qRange + qMin;
+};
+
+template<int src_t, int dst_t, int wrk_t>  void distributeErfCompactScaled<src_t, dst_t, wrk_t>::operator()(const typename distributeErfCompactScaled::srcType src, typename distributeErfCompactScaled::dstType &dst)
+{
+    // 5 Region code : constant - erf - linear - erf - constant
+    // Assumes that c is in the linear region.
+    //
+    // distributeErfCompactScaled
+    //
+    //         = disMin;                                                                                    sMin    <= x <= lambda1 * qRange + qMin
+    //         = disScale * erf( g * (scale *x - c) ) + disConstant;                        lambda1 * qRange + qMin <  x <  omegaP1 * qRange + qMin
+    // pDis(x) = scale * x - linearConstant;                                                omegaP1 * qRange + qMin <= x <= omegaP2 * qRange + qMin
+    //         = disScale * erf( g * (scale *x - c) ) + disConstant + shiftednErfConstant;  omegaP2 * qRange + qMin <  x <  lambda2 * qRange + qMin
+    //         = disMax;                                                                    lambda2 * qRange + qMin <= x <= sMax
+    
+    if(src <= qLambda1){
+        dst = par.disMin;                                                                                       //   sMin    <= x <= lambda1
+    } else if (src >= qLambda2){
+        dst = par.disMax;                                                                                       //   lambda1 <= x <= sMax
+    } else {
+        if(src <= qOmega1){
+            dst = dstType(par.disConstant - par.disScale * erf(par.g*(par.c - scale * src)));                   //   lambda1 <  x <  omegaP1
+        } else if (src >= qOmega2){
+            dst = dstType(par.disConstant + par.disScale * erf(par.g*(scale * src - par.c)) + par.shiftednErfConstant); //   omegaP2 <  x <  lambda2
+        } else {
+            dst = scale * src - par.linearConstant;                                                                     //   omegaP1 <  x <  omegaP2
+        }
+    }
+};
+    
+template class distributeErfCompactScaled<CV_8U, CV_8U,  CV_16S>;     template class distributeErfCompactScaled<CV_8S, CV_8U,  CV_16S>;
+template class distributeErfCompactScaled<CV_8U, CV_8S,  CV_16S>;     template class distributeErfCompactScaled<CV_8S, CV_8S,  CV_16S>;
+template class distributeErfCompactScaled<CV_8U, CV_16U, CV_16S>;     template class distributeErfCompactScaled<CV_8S, CV_16U, CV_16S>;
+template class distributeErfCompactScaled<CV_8U, CV_16S, CV_16S>;     template class distributeErfCompactScaled<CV_8S, CV_16S, CV_16S>;
+template class distributeErfCompactScaled<CV_8U, CV_32U, CV_16S>;     template class distributeErfCompactScaled<CV_8S, CV_32U, CV_16S>;
+template class distributeErfCompactScaled<CV_8U, CV_32S, CV_16S>;     template class distributeErfCompactScaled<CV_8S, CV_32S, CV_16S>;
+template class distributeErfCompactScaled<CV_8U, CV_64U, CV_16S>;     template class distributeErfCompactScaled<CV_8S, CV_64U, CV_16S>;
+template class distributeErfCompactScaled<CV_8U, CV_64S, CV_16S>;     template class distributeErfCompactScaled<CV_8S, CV_64S, CV_16S>;
+
+template class distributeErfCompactScaled<CV_16U, CV_8U,  CV_32S>;    template class distributeErfCompactScaled<CV_16S, CV_8U,  CV_32S>;
+template class distributeErfCompactScaled<CV_16U, CV_8S,  CV_32S>;    template class distributeErfCompactScaled<CV_16S, CV_8S,  CV_32S>;
+template class distributeErfCompactScaled<CV_16U, CV_16U, CV_32S>;    template class distributeErfCompactScaled<CV_16S, CV_16U, CV_32S>;
+template class distributeErfCompactScaled<CV_16U, CV_16S, CV_32S>;    template class distributeErfCompactScaled<CV_16S, CV_16S, CV_32S>;
+template class distributeErfCompactScaled<CV_16U, CV_32U, CV_32S>;    template class distributeErfCompactScaled<CV_16S, CV_32U, CV_32S>;
+template class distributeErfCompactScaled<CV_16U, CV_32S, CV_32S>;    template class distributeErfCompactScaled<CV_16S, CV_32S, CV_32S>;
+template class distributeErfCompactScaled<CV_16U, CV_64U, CV_32S>;    template class distributeErfCompactScaled<CV_16S, CV_64U, CV_32S>;
+template class distributeErfCompactScaled<CV_16U, CV_64S, CV_32S>;    template class distributeErfCompactScaled<CV_16S, CV_64S, CV_32S>;
+
+template class distributeErfCompactScaled<CV_32U, CV_8U,  CV_64S>;    template class distributeErfCompactScaled<CV_32S, CV_8U,  CV_64S>;
+template class distributeErfCompactScaled<CV_32U, CV_8S,  CV_64S>;    template class distributeErfCompactScaled<CV_32S, CV_8S,  CV_64S>;
+template class distributeErfCompactScaled<CV_32U, CV_16U, CV_64S>;    template class distributeErfCompactScaled<CV_32S, CV_16U, CV_64S>;
+template class distributeErfCompactScaled<CV_32U, CV_16S, CV_64S>;    template class distributeErfCompactScaled<CV_32S, CV_16S, CV_64S>;
+template class distributeErfCompactScaled<CV_32U, CV_32U, CV_64S>;    template class distributeErfCompactScaled<CV_32S, CV_32U, CV_64S>;
+template class distributeErfCompactScaled<CV_32U, CV_32S, CV_64S>;    template class distributeErfCompactScaled<CV_32S, CV_32S, CV_64S>;
+template class distributeErfCompactScaled<CV_32U, CV_64U, CV_64S>;    template class distributeErfCompactScaled<CV_32S, CV_64U, CV_64S>;
+template class distributeErfCompactScaled<CV_32U, CV_64S, CV_64S>;    template class distributeErfCompactScaled<CV_32S, CV_64S, CV_64S>;
+    
+template<int src_t, int dst_t> distributeLinear<src_t, dst_t>::distributeLinear(){};
+template<int src_t, int dst_t> distributeLinear<src_t, dst_t>::distributeLinear(distributeErfParameters<src_t, dst_t> _par):par(_par){};
+    
+template<int src_t, int dst_t> distributeLinear<src_t, dst_t>::distributeLinear(double _uG, double _uC, typename distributeLinear::srcType sMin, typename distributeLinear::srcType sMax, typename distributeLinear::dstType dMin, typename distributeLinear::dstType dMax): par(_uG,_uC,sMin,sMax,dMin,dMax)    {
+        CV_Assert((int)sMin <= (int)sMax && (int)dMin <= (int)dMax);
+    };
+    
+template<int src_t, int dst_t>  void distributeLinear<src_t, dst_t>::operator()(const typename distributeLinear::srcType src, typename distributeLinear::dstType &dst)
+    {
+        if(src <= par.Lambda[0]){
+            dst = par.disMin;
+        }else if(src >= par.Lambda[1]){
+            dst = par.disMax;
+        }else{
+            dst = dstType( par.linearGrad * src) - par.linearConstant;
+        };
+    };
+    
+    
+    template class distributeLinear<CV_8U, CV_8U>;      template class distributeLinear<CV_8S, CV_8U>;
+    template class distributeLinear<CV_8U, CV_8S>;      template class distributeLinear<CV_8S, CV_8S>;
+    template class distributeLinear<CV_8U, CV_16U>;     template class distributeLinear<CV_8S, CV_16U>;
+    template class distributeLinear<CV_8U, CV_16S>;     template class distributeLinear<CV_8S, CV_16S>;
+    template class distributeLinear<CV_8U, CV_32U>;     template class distributeLinear<CV_8S, CV_32U>;
+    template class distributeLinear<CV_8U, CV_32S>;     template class distributeLinear<CV_8S, CV_32S>;
+    template class distributeLinear<CV_8U, CV_64U>;     template class distributeLinear<CV_8S, CV_64U>;
+    template class distributeLinear<CV_8U, CV_64S>;     template class distributeLinear<CV_8S, CV_64S>;
+    
+    template class distributeLinear<CV_16U, CV_8U>;     template class distributeLinear<CV_16S, CV_8U>;
+    template class distributeLinear<CV_16U, CV_8S>;     template class distributeLinear<CV_16S, CV_8S>;
+    template class distributeLinear<CV_16U, CV_16U>;    template class distributeLinear<CV_16S, CV_16U>;
+    template class distributeLinear<CV_16U, CV_16S>;    template class distributeLinear<CV_16S, CV_16S>;
+    template class distributeLinear<CV_16U, CV_32U>;    template class distributeLinear<CV_16S, CV_32U>;
+    template class distributeLinear<CV_16U, CV_32S>;    template class distributeLinear<CV_16S, CV_32S>;
+    template class distributeLinear<CV_16U, CV_64U>;    template class distributeLinear<CV_16S, CV_64U>;
+    template class distributeLinear<CV_16U, CV_64S>;    template class distributeLinear<CV_16S, CV_64S>;
+    
+    template class distributeLinear<CV_32U, CV_8U>;     template class distributeLinear<CV_32S, CV_8U>;
+    template class distributeLinear<CV_32U, CV_8S>;     template class distributeLinear<CV_32S, CV_8S>;
+    template class distributeLinear<CV_32U, CV_16U>;    template class distributeLinear<CV_32S, CV_16U>;
+    template class distributeLinear<CV_32U, CV_16S>;    template class distributeLinear<CV_32S, CV_16S>;
+    template class distributeLinear<CV_32U, CV_32U>;    template class distributeLinear<CV_32S, CV_32U>;
+    template class distributeLinear<CV_32U, CV_32S>;    template class distributeLinear<CV_32S, CV_32S>;
+    template class distributeLinear<CV_32U, CV_64U>;    template class distributeLinear<CV_32S, CV_64U>;
+    template class distributeLinear<CV_32U, CV_64S>;    template class distributeLinear<CV_32S, CV_64S>;
+    
+    template class distributeLinear<CV_64U, CV_8U>;     template class distributeLinear<CV_64S, CV_8U>;
+    template class distributeLinear<CV_64U, CV_8S>;     template class distributeLinear<CV_64S, CV_8S>;
+    template class distributeLinear<CV_64U, CV_16U>;    template class distributeLinear<CV_64S, CV_16U>;
+    template class distributeLinear<CV_64U, CV_16S>;    template class distributeLinear<CV_64S, CV_16S>;
+    template class distributeLinear<CV_64U, CV_32U>;    template class distributeLinear<CV_64S, CV_32U>;
+    template class distributeLinear<CV_64U, CV_32S>;    template class distributeLinear<CV_64S, CV_32S>;
+    template class distributeLinear<CV_64U, CV_64U>;    template class distributeLinear<CV_64S, CV_64U>;
+    template class distributeLinear<CV_64U, CV_64S>;    template class distributeLinear<CV_64S, CV_64S>;
+    
+
+
+template<int src_t, int dst_t, int wrk_t> distributeLinearScaled<src_t, dst_t, wrk_t>::distributeLinearScaled(){};
+    template<int src_t, int dst_t, int wrk_t> distributeLinearScaled<src_t, dst_t, wrk_t>::distributeLinearScaled(distributeErfParameters<src_t, dst_t> _par, double _scale, double _qRange, double _qMin):scale(_scale), qRange(_qRange), qMin(_qMin), par(_par){
+        qLambda1 = par.uLambda1 * qRange + qMin;
+        qLambda2 = par.uLambda2 * qRange + qMin;
+        qOmega1  = par.uOmegaP1 * qRange + qMin;
+        qOmega2  = par.uOmegaP2 * qRange + qMin;
+    qLinearGrad = par.linearGrad * scale;
+};
+
+template<int src_t, int dst_t, int wrk_t>  void distributeLinearScaled<src_t, dst_t, wrk_t>::operator()(const typename distributeLinearScaled::srcType src, typename distributeLinearScaled::dstType &dst)
+{
+    // Linear Distribution
+    //
+    // distributeLinearScaled
+    //
+    //         = disMin;                                                         sMin    <= x <= lambda1 * qRange + qMin
+    // pDis(x) = linearGrad * scale * x - linearConstant;        omegaP1 * qRange + qMin <= x <= omegaP2 * qRange + qMin
+    //         = disMax;                                         lambda2 * qRange + qMin <= x <= sMax
+    
+    if(src <= qLambda1){
+        dst = par.disMin;                                        //   sMin    <= x <= lambda1
+    } else if (src >= qLambda2){
+        dst = par.disMax;                                        //   lambda2 <= x <= sMax
+    } else {
+        dst = dstType( qLinearGrad * src) - par.linearConstant;  //   lambda1 <= x <= lambda2
+    }
+};
+
+template class distributeLinearScaled<CV_8U, CV_8U,  CV_16S>;     template class distributeLinearScaled<CV_8S, CV_8U,  CV_16S>;
+template class distributeLinearScaled<CV_8U, CV_8S,  CV_16S>;     template class distributeLinearScaled<CV_8S, CV_8S,  CV_16S>;
+template class distributeLinearScaled<CV_8U, CV_16U, CV_16S>;     template class distributeLinearScaled<CV_8S, CV_16U, CV_16S>;
+template class distributeLinearScaled<CV_8U, CV_16S, CV_16S>;     template class distributeLinearScaled<CV_8S, CV_16S, CV_16S>;
+template class distributeLinearScaled<CV_8U, CV_32U, CV_16S>;     template class distributeLinearScaled<CV_8S, CV_32U, CV_16S>;
+template class distributeLinearScaled<CV_8U, CV_32S, CV_16S>;     template class distributeLinearScaled<CV_8S, CV_32S, CV_16S>;
+template class distributeLinearScaled<CV_8U, CV_64U, CV_16S>;     template class distributeLinearScaled<CV_8S, CV_64U, CV_16S>;
+template class distributeLinearScaled<CV_8U, CV_64S, CV_16S>;     template class distributeLinearScaled<CV_8S, CV_64S, CV_16S>;
+
+template class distributeLinearScaled<CV_16U, CV_8U,  CV_32S>;    template class distributeLinearScaled<CV_16S, CV_8U,  CV_32S>;
+template class distributeLinearScaled<CV_16U, CV_8S,  CV_32S>;    template class distributeLinearScaled<CV_16S, CV_8S,  CV_32S>;
+template class distributeLinearScaled<CV_16U, CV_16U, CV_32S>;    template class distributeLinearScaled<CV_16S, CV_16U, CV_32S>;
+template class distributeLinearScaled<CV_16U, CV_16S, CV_32S>;    template class distributeLinearScaled<CV_16S, CV_16S, CV_32S>;
+template class distributeLinearScaled<CV_16U, CV_32U, CV_32S>;    template class distributeLinearScaled<CV_16S, CV_32U, CV_32S>;
+template class distributeLinearScaled<CV_16U, CV_32S, CV_32S>;    template class distributeLinearScaled<CV_16S, CV_32S, CV_32S>;
+template class distributeLinearScaled<CV_16U, CV_64U, CV_32S>;    template class distributeLinearScaled<CV_16S, CV_64U, CV_32S>;
+template class distributeLinearScaled<CV_16U, CV_64S, CV_32S>;    template class distributeLinearScaled<CV_16S, CV_64S, CV_32S>;
+
+template class distributeLinearScaled<CV_32U, CV_8U,  CV_64S>;    template class distributeLinearScaled<CV_32S, CV_8U,  CV_64S>;
+template class distributeLinearScaled<CV_32U, CV_8S,  CV_64S>;    template class distributeLinearScaled<CV_32S, CV_8S,  CV_64S>;
+template class distributeLinearScaled<CV_32U, CV_16U, CV_64S>;    template class distributeLinearScaled<CV_32S, CV_16U, CV_64S>;
+template class distributeLinearScaled<CV_32U, CV_16S, CV_64S>;    template class distributeLinearScaled<CV_32S, CV_16S, CV_64S>;
+template class distributeLinearScaled<CV_32U, CV_32U, CV_64S>;    template class distributeLinearScaled<CV_32S, CV_32U, CV_64S>;
+template class distributeLinearScaled<CV_32U, CV_32S, CV_64S>;    template class distributeLinearScaled<CV_32S, CV_32S, CV_64S>;
+template class distributeLinearScaled<CV_32U, CV_64U, CV_64S>;    template class distributeLinearScaled<CV_32S, CV_64U, CV_64S>;
+template class distributeLinearScaled<CV_32U, CV_64S, CV_64S>;    template class distributeLinearScaled<CV_32S, CV_64S, CV_64S>;
 
 // computes cubic spline coefficients for a function: (xi=i, yi=f[i]), i=0..n
 template<typename _Tp> static void splineBuild(const _Tp* f, int n, _Tp* tab)
@@ -202,7 +1759,9 @@ template<> struct ColorChannel<float>
 template <typename Cvt>
 class CvtColorLoop_Invoker : public ParallelLoopBody
 {
-    typedef typename Cvt::channel_type _Tp;
+    typedef typename Cvt::src_channel_type _Tp;
+    typedef typename Cvt::dst_channel_type _Tp2;
+
 public:
 
     CvtColorLoop_Invoker(const uchar * src_data_, size_t src_step_, uchar * dst_data_, size_t dst_step_, int width_, const Cvt& _cvt) :
@@ -217,7 +1776,9 @@ public:
         uchar* yD = dst_data + static_cast<size_t>(range.start) * dst_step;
 
         for( int i = range.start; i < range.end; ++i, yS += src_step, yD += dst_step )
-            cvt(reinterpret_cast<const _Tp*>(yS), reinterpret_cast<_Tp*>(yD), width);
+        {
+            cvt(reinterpret_cast<const _Tp*>(yS), reinterpret_cast<_Tp2*>(yD), width);
+        }
     }
 
 private:
@@ -233,7 +1794,7 @@ private:
 
 template <typename Cvt>
 void CvtColorLoop(const uchar * src_data, size_t src_step, uchar * dst_data, size_t dst_step, int width, int height, const Cvt& cvt)
-{
+    {
     parallel_for_(Range(0, height),
                   CvtColorLoop_Invoker<Cvt>(src_data, src_step, dst_data, dst_step, width, cvt),
                   (width * height) / static_cast<double>(1<<16));
@@ -329,117 +1890,153 @@ static IppStatus CV_STDCALL ippiSwapChannels_32f_C3C4Rf(const Ipp32f* pSrc, int 
 }
 
 static ippiReorderFunc ippiSwapChannelsC3C4RTab[] =
-{
-    (ippiReorderFunc)ippiSwapChannels_8u_C3C4Rf, 0, (ippiReorderFunc)ippiSwapChannels_16u_C3C4Rf, 0,
-    0, (ippiReorderFunc)ippiSwapChannels_32f_C3C4Rf, 0, 0
-};
+TYPE_TAB_ORDER( \
+         (ippiReorderFunc)ippiSwapChannels_8u_C3C4Rf, 0, \
+         (ippiReorderFunc)ippiSwapChannels_16u_C3C4Rf, 0, 0, 0, \
+         0, 0, (ippiReorderFunc)ippiSwapChannels_32f_C3C4Rf, 0, \
+         0, 0, 0, 0, 0, 0 \
+         );
 
 static ippiGeneralFunc ippiCopyAC4C3RTab[] =
-{
-    (ippiGeneralFunc)ippiCopy_8u_AC4C3R, 0, (ippiGeneralFunc)ippiCopy_16u_AC4C3R, 0,
-    0, (ippiGeneralFunc)ippiCopy_32f_AC4C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiCopy_8u_AC4C3R, 0, \
+        (ippiGeneralFunc)ippiCopy_16u_AC4C3R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiCopy_32f_AC4C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiReorderFunc ippiSwapChannelsC4C3RTab[] =
-{
-    (ippiReorderFunc)ippiSwapChannels_8u_C4C3R, 0, (ippiReorderFunc)ippiSwapChannels_16u_C4C3R, 0,
-    0, (ippiReorderFunc)ippiSwapChannels_32f_C4C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiReorderFunc)ippiSwapChannels_8u_C4C3R, 0, \
+        (ippiReorderFunc)ippiSwapChannels_16u_C4C3R, 0, 0, 0, \
+        0, 0, (ippiReorderFunc)ippiSwapChannels_32f_C4C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiReorderFunc ippiSwapChannelsC3RTab[] =
-{
-    (ippiReorderFunc)ippiSwapChannels_8u_C3R, 0, (ippiReorderFunc)ippiSwapChannels_16u_C3R, 0,
-    0, (ippiReorderFunc)ippiSwapChannels_32f_C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiReorderFunc)ippiSwapChannels_8u_C3R, 0, \
+        (ippiReorderFunc)ippiSwapChannels_16u_C3R, 0, 0, 0, \
+        0, 0, (ippiReorderFunc)ippiSwapChannels_32f_C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
-#if IPP_VERSION_X100 >= 810
+#if IPP_VERSION_X100 >= 801
 static ippiReorderFunc ippiSwapChannelsC4RTab[] =
-{
-    (ippiReorderFunc)ippiSwapChannels_8u_C4R, 0, (ippiReorderFunc)ippiSwapChannels_16u_C4R, 0,
-    0, (ippiReorderFunc)ippiSwapChannels_32f_C4R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiReorderFunc)ippiSwapChannels_8u_C4R, 0, \
+        (ippiReorderFunc)ippiSwapChannels_16u_C4R, 0, 0, 0, \
+        0, 0, (ippiReorderFunc)ippiSwapChannels_32f_C4R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 #endif
 
 static ippiColor2GrayFunc ippiColor2GrayC3Tab[] =
-{
-    (ippiColor2GrayFunc)ippiColorToGray_8u_C3C1R, 0, (ippiColor2GrayFunc)ippiColorToGray_16u_C3C1R, 0,
-    0, (ippiColor2GrayFunc)ippiColorToGray_32f_C3C1R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiColor2GrayFunc)ippiColorToGray_8u_C3C1R, 0, \
+        (ippiColor2GrayFunc)ippiColorToGray_16u_C3C1R, 0, 0, 0, \
+        0, 0, (ippiColor2GrayFunc)ippiColorToGray_32f_C3C1R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiColor2GrayFunc ippiColor2GrayC4Tab[] =
-{
-    (ippiColor2GrayFunc)ippiColorToGray_8u_AC4C1R, 0, (ippiColor2GrayFunc)ippiColorToGray_16u_AC4C1R, 0,
-    0, (ippiColor2GrayFunc)ippiColorToGray_32f_AC4C1R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiColor2GrayFunc)ippiColorToGray_8u_AC4C1R, 0, \
+        (ippiColor2GrayFunc)ippiColorToGray_16u_AC4C1R, 0, 0, 0, \
+        0, 0, (ippiColor2GrayFunc)ippiColorToGray_32f_AC4C1R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiGeneralFunc ippiRGB2GrayC3Tab[] =
-{
-    (ippiGeneralFunc)ippiRGBToGray_8u_C3C1R, 0, (ippiGeneralFunc)ippiRGBToGray_16u_C3C1R, 0,
-    0, (ippiGeneralFunc)ippiRGBToGray_32f_C3C1R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiRGBToGray_8u_C3C1R, 0, \
+        (ippiGeneralFunc)ippiRGBToGray_16u_C3C1R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiRGBToGray_32f_C3C1R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiGeneralFunc ippiRGB2GrayC4Tab[] =
-{
-    (ippiGeneralFunc)ippiRGBToGray_8u_AC4C1R, 0, (ippiGeneralFunc)ippiRGBToGray_16u_AC4C1R, 0,
-    0, (ippiGeneralFunc)ippiRGBToGray_32f_AC4C1R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiRGBToGray_8u_AC4C1R, 0, \
+        (ippiGeneralFunc)ippiRGBToGray_16u_AC4C1R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiRGBToGray_32f_AC4C1R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiGeneralFunc ippiCopyP3C3RTab[] =
-{
-    (ippiGeneralFunc)ippiCopy_8u_P3C3R, 0, (ippiGeneralFunc)ippiCopy_16u_P3C3R, 0,
-    0, (ippiGeneralFunc)ippiCopy_32f_P3C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiCopy_8u_P3C3R, 0, \
+        (ippiGeneralFunc)ippiCopy_16u_P3C3R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiCopy_32f_P3C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiGeneralFunc ippiRGB2XYZTab[] =
-{
-    (ippiGeneralFunc)ippiRGBToXYZ_8u_C3R, 0, (ippiGeneralFunc)ippiRGBToXYZ_16u_C3R, 0,
-    0, (ippiGeneralFunc)ippiRGBToXYZ_32f_C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiRGBToXYZ_8u_C3R, 0, \
+        (ippiGeneralFunc)ippiRGBToXYZ_16u_C3R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiRGBToXYZ_32f_C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiGeneralFunc ippiXYZ2RGBTab[] =
-{
-    (ippiGeneralFunc)ippiXYZToRGB_8u_C3R, 0, (ippiGeneralFunc)ippiXYZToRGB_16u_C3R, 0,
-    0, (ippiGeneralFunc)ippiXYZToRGB_32f_C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiXYZToRGB_8u_C3R, 0, \
+        (ippiGeneralFunc)ippiXYZToRGB_16u_C3R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiXYZToRGB_32f_C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 #if IPP_DISABLE_BLOCK
 static ippiGeneralFunc ippiRGB2HSVTab[] =
-{
-    (ippiGeneralFunc)ippiRGBToHSV_8u_C3R, 0, (ippiGeneralFunc)ippiRGBToHSV_16u_C3R, 0,
-    0, 0, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiRGBToHSV_8u_C3R, 0, \
+        (ippiGeneralFunc)ippiRGBToHSV_16u_C3R, 0, 0, 0, \
+        0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 #endif
 
 static ippiGeneralFunc ippiHSV2RGBTab[] =
-{
-    (ippiGeneralFunc)ippiHSVToRGB_8u_C3R, 0, (ippiGeneralFunc)ippiHSVToRGB_16u_C3R, 0,
-    0, 0, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiHSVToRGB_8u_C3R, 0, \
+        (ippiGeneralFunc)ippiHSVToRGB_16u_C3R, 0, 0, 0, \
+        0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiGeneralFunc ippiRGB2HLSTab[] =
-{
-    (ippiGeneralFunc)ippiRGBToHLS_8u_C3R, 0, (ippiGeneralFunc)ippiRGBToHLS_16u_C3R, 0,
-    0, (ippiGeneralFunc)ippiRGBToHLS_32f_C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiRGBToHLS_8u_C3R, 0, \
+        (ippiGeneralFunc)ippiRGBToHLS_16u_C3R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiRGBToHLS_32f_C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiGeneralFunc ippiHLS2RGBTab[] =
-{
-    (ippiGeneralFunc)ippiHLSToRGB_8u_C3R, 0, (ippiGeneralFunc)ippiHLSToRGB_16u_C3R, 0,
-    0, (ippiGeneralFunc)ippiHLSToRGB_32f_C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiHLSToRGB_8u_C3R, 0, \
+        (ippiGeneralFunc)ippiHLSToRGB_16u_C3R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiHLSToRGB_32f_C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 #if IPP_DISABLE_BLOCK
 static ippiGeneralFunc ippiRGBToLUVTab[] =
-{
-    (ippiGeneralFunc)ippiRGBToLUV_8u_C3R, 0, (ippiGeneralFunc)ippiRGBToLUV_16u_C3R, 0,
-    0, (ippiGeneralFunc)ippiRGBToLUV_32f_C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiRGBToLUV_8u_C3R, 0, \
+        (ippiGeneralFunc)ippiRGBToLUV_16u_C3R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiRGBToLUV_32f_C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
 static ippiGeneralFunc ippiLUVToRGBTab[] =
-{
-    (ippiGeneralFunc)ippiLUVToRGB_8u_C3R, 0, (ippiGeneralFunc)ippiLUVToRGB_16u_C3R, 0,
-    0, (ippiGeneralFunc)ippiLUVToRGB_32f_C3R, 0, 0
-};
+TYPE_TAB_ORDER( \
+        (ippiGeneralFunc)ippiLUVToRGB_8u_C3R, 0, \
+        (ippiGeneralFunc)ippiLUVToRGB_16u_C3R, 0, 0, 0, \
+        0, 0, (ippiGeneralFunc)ippiLUVToRGB_32f_C3R, 0, \
+        0, 0, 0, 0, 0, 0 \
+        );
 #endif
 
 struct IPPGeneralFunctor
@@ -595,7 +2192,8 @@ private:
 
 template<typename _Tp> struct RGB2RGB
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
+
 
     RGB2RGB(int _srccn, int _dstcn, int _blueIdx) : srccn(_srccn), dstcn(_dstcn), blueIdx(_blueIdx) {}
     void operator()(const _Tp* src, _Tp* dst, int n) const
@@ -638,7 +2236,7 @@ template<typename _Tp> struct RGB2RGB
 
 template<> struct RGB2RGB<uchar>
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2RGB(int _srccn, int _dstcn, int _blueIdx) :
         srccn(_srccn), dstcn(_dstcn), blueIdx(_blueIdx)
@@ -775,7 +2373,7 @@ template<> struct RGB2RGB<uchar>
 
 struct RGB5x52RGB
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB5x52RGB(int _dstcn, int _blueIdx, int _greenBits)
         : dstcn(_dstcn), blueIdx(_blueIdx), greenBits(_greenBits)
@@ -885,7 +2483,7 @@ struct RGB5x52RGB
 
 struct RGB2RGB5x5
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2RGB5x5(int _srccn, int _blueIdx, int _greenBits)
         : srccn(_srccn), blueIdx(_blueIdx), greenBits(_greenBits)
@@ -981,7 +2579,7 @@ struct RGB2RGB5x5
 template<typename _Tp>
 struct Gray2RGB
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     Gray2RGB(int _dstcn) : dstcn(_dstcn) {}
     void operator()(const _Tp* src, _Tp* dst, int n) const
@@ -1008,7 +2606,7 @@ struct Gray2RGB
 
 struct Gray2RGB5x5
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     Gray2RGB5x5(int _greenBits) : greenBits(_greenBits)
     {
@@ -1129,7 +2727,7 @@ enum
 
 struct RGB5x52Gray
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB5x52Gray(int _greenBits) : greenBits(_greenBits)
     {
@@ -1286,7 +2884,7 @@ struct RGB5x52Gray
 
 template<typename _Tp> struct RGB2Gray
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     RGB2Gray(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -1309,7 +2907,7 @@ template<typename _Tp> struct RGB2Gray
 
 template<> struct RGB2Gray<uchar>
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2Gray(int _srccn, int blueIdx, const int* coeffs) : srccn(_srccn)
     {
@@ -1342,7 +2940,7 @@ template<> struct RGB2Gray<uchar>
 template <>
 struct RGB2Gray<ushort>
 {
-    typedef ushort channel_type;
+    typedef ushort src_channel_type; typedef ushort dst_channel_type;
 
     RGB2Gray(int _srccn, int blueIdx, const int* _coeffs) :
         srccn(_srccn)
@@ -1433,7 +3031,7 @@ struct RGB2Gray<ushort>
 template <>
 struct RGB2Gray<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2Gray(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -1503,7 +3101,7 @@ struct RGB2Gray<float>
 template <>
 struct RGB2Gray<ushort>
 {
-    typedef ushort channel_type;
+    typedef ushort src_channel_type; typedef ushort dst_channel_type;
 
     RGB2Gray(int _srccn, int blueIdx, const int* _coeffs) :
         srccn(_srccn)
@@ -1623,7 +3221,7 @@ struct RGB2Gray<ushort>
 template <>
 struct RGB2Gray<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2Gray(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -1721,7 +3319,7 @@ struct RGB2Gray<float>
 
 template<> struct RGB2Gray<ushort>
 {
-    typedef ushort channel_type;
+    typedef ushort src_channel_type; typedef ushort dst_channel_type;
 
     RGB2Gray(int _srccn, int blueIdx, const int* _coeffs) : srccn(_srccn)
     {
@@ -1747,7 +3345,7 @@ template<> struct RGB2Gray<ushort>
 
 template<typename _Tp> struct RGB2YCrCb_f
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     RGB2YCrCb_f(int _srccn, int _blueIdx, const float* _coeffs) : srccn(_srccn), blueIdx(_blueIdx)
     {
@@ -1779,7 +3377,7 @@ template<typename _Tp> struct RGB2YCrCb_f
 template <>
 struct RGB2YCrCb_f<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2YCrCb_f(int _srccn, int _blueIdx, const float* _coeffs) :
         srccn(_srccn), blueIdx(_blueIdx)
@@ -1844,7 +3442,7 @@ struct RGB2YCrCb_f<float>
 template <>
 struct RGB2YCrCb_f<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2YCrCb_f(int _srccn, int _blueIdx, const float* _coeffs) :
         srccn(_srccn), blueIdx(_blueIdx)
@@ -1940,7 +3538,7 @@ struct RGB2YCrCb_f<float>
 
 template<typename _Tp> struct RGB2YCrCb_i
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     RGB2YCrCb_i(int _srccn, int _blueIdx, const int* _coeffs)
         : srccn(_srccn), blueIdx(_blueIdx)
@@ -1974,7 +3572,7 @@ template<typename _Tp> struct RGB2YCrCb_i
 template <>
 struct RGB2YCrCb_i<uchar>
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2YCrCb_i(int _srccn, int _blueIdx, const int* _coeffs)
         : srccn(_srccn), blueIdx(_blueIdx)
@@ -2068,7 +3666,7 @@ struct RGB2YCrCb_i<uchar>
 template <>
 struct RGB2YCrCb_i<ushort>
 {
-    typedef ushort channel_type;
+    typedef ushort src_channel_type; typedef ushort dst_channel_type;
 
     RGB2YCrCb_i(int _srccn, int _blueIdx, const int* _coeffs)
         : srccn(_srccn), blueIdx(_blueIdx)
@@ -2191,7 +3789,7 @@ struct RGB2YCrCb_i<ushort>
 template <>
 struct RGB2YCrCb_i<uchar>
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2YCrCb_i(int _srccn, int _blueIdx, const int* _coeffs)
         : srccn(_srccn), blueIdx(_blueIdx)
@@ -2351,7 +3949,7 @@ struct RGB2YCrCb_i<uchar>
 template <>
 struct RGB2YCrCb_i<ushort>
 {
-    typedef ushort channel_type;
+    typedef ushort src_channel_type; typedef ushort dst_channel_type;
 
     RGB2YCrCb_i(int _srccn, int _blueIdx, const int* _coeffs)
         : srccn(_srccn), blueIdx(_blueIdx)
@@ -2481,7 +4079,7 @@ struct RGB2YCrCb_i<ushort>
 
 template<typename _Tp> struct YCrCb2RGB_f
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     YCrCb2RGB_f(int _dstcn, int _blueIdx, const float* _coeffs)
         : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -2519,7 +4117,7 @@ template<typename _Tp> struct YCrCb2RGB_f
 template <>
 struct YCrCb2RGB_f<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     YCrCb2RGB_f(int _dstcn, int _blueIdx, const float* _coeffs)
         : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -2592,7 +4190,7 @@ struct YCrCb2RGB_f<float>
 template <>
 struct YCrCb2RGB_f<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     YCrCb2RGB_f(int _dstcn, int _blueIdx, const float* _coeffs)
         : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -2703,7 +4301,7 @@ struct YCrCb2RGB_f<float>
 
 template<typename _Tp> struct YCrCb2RGB_i
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     YCrCb2RGB_i(int _dstcn, int _blueIdx, const int* _coeffs)
         : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -2744,7 +4342,7 @@ template<typename _Tp> struct YCrCb2RGB_i
 template <>
 struct YCrCb2RGB_i<uchar>
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     YCrCb2RGB_i(int _dstcn, int _blueIdx, const int* _coeffs)
         : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -2849,7 +4447,7 @@ struct YCrCb2RGB_i<uchar>
 template <>
 struct YCrCb2RGB_i<ushort>
 {
-    typedef ushort channel_type;
+    typedef ushort src_channel_type; typedef ushort dst_channel_type;
 
     YCrCb2RGB_i(int _dstcn, int _blueIdx, const int* _coeffs)
         : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -2991,7 +4589,7 @@ struct YCrCb2RGB_i<ushort>
 template <>
 struct YCrCb2RGB_i<uchar>
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     YCrCb2RGB_i(int _dstcn, int _blueIdx, const int* _coeffs)
         : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -3335,7 +4933,7 @@ static const float XYZ2sRGB_D65[] =
 
 template<typename _Tp> struct RGB2XYZ_f
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     RGB2XYZ_f(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -3372,7 +4970,7 @@ template<typename _Tp> struct RGB2XYZ_f
 template <>
 struct RGB2XYZ_f<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2XYZ_f(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -3443,7 +5041,7 @@ struct RGB2XYZ_f<float>
 template <>
 struct RGB2XYZ_f<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2XYZ_f(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -3554,7 +5152,7 @@ struct RGB2XYZ_f<float>
 
 template<typename _Tp> struct RGB2XYZ_i
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     RGB2XYZ_i(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -3599,7 +5197,7 @@ template<typename _Tp> struct RGB2XYZ_i
 template <>
 struct RGB2XYZ_i<uchar>
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2XYZ_i(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -3705,7 +5303,7 @@ struct RGB2XYZ_i<uchar>
 template <>
 struct RGB2XYZ_i<ushort>
 {
-    typedef ushort channel_type;
+    typedef ushort src_channel_type; typedef ushort dst_channel_type;
 
     RGB2XYZ_i(int _srccn, int blueIdx, const float* _coeffs) : srccn(_srccn)
     {
@@ -3838,7 +5436,7 @@ struct RGB2XYZ_i<ushort>
 
 template<typename _Tp> struct XYZ2RGB_f
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     XYZ2RGB_f(int _dstcn, int _blueIdx, const float* _coeffs)
     : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -3879,7 +5477,7 @@ template<typename _Tp> struct XYZ2RGB_f
 template <>
 struct XYZ2RGB_f<float>
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     XYZ2RGB_f(int _dstcn, int _blueIdx, const float* _coeffs)
     : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -4001,7 +5599,7 @@ struct XYZ2RGB_f<float>
 
 template<typename _Tp> struct XYZ2RGB_i
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     XYZ2RGB_i(int _dstcn, int _blueIdx, const int* _coeffs)
     : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -4050,7 +5648,7 @@ template<typename _Tp> struct XYZ2RGB_i
 template <>
 struct XYZ2RGB_i<uchar>
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     XYZ2RGB_i(int _dstcn, int _blueIdx, const int* _coeffs)
     : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -4168,7 +5766,7 @@ struct XYZ2RGB_i<uchar>
 template <>
 struct XYZ2RGB_i<ushort>
 {
-    typedef ushort channel_type;
+    typedef ushort src_channel_type; typedef ushort dst_channel_type;
 
     XYZ2RGB_i(int _dstcn, int _blueIdx, const int* _coeffs)
     : dstcn(_dstcn), blueIdx(_blueIdx)
@@ -4323,7 +5921,7 @@ struct XYZ2RGB_i<ushort>
 
 struct RGB2HSV_b
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2HSV_b(int _srccn, int _blueIdx, int _hrange)
     : srccn(_srccn), blueIdx(_blueIdx), hrange(_hrange)
@@ -4391,7 +5989,7 @@ struct RGB2HSV_b
 
 struct RGB2HSV_f
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2HSV_f(int _srccn, int _blueIdx, float _hrange)
     : srccn(_srccn), blueIdx(_blueIdx), hrange(_hrange) {}
@@ -4440,7 +6038,7 @@ struct RGB2HSV_f
 
 struct HSV2RGB_f
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     HSV2RGB_f(int _dstcn, int _blueIdx, float _hrange)
     : dstcn(_dstcn), blueIdx(_blueIdx), hscale(6.f/_hrange) {}
@@ -4503,7 +6101,7 @@ struct HSV2RGB_f
 
 struct HSV2RGB_b
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     HSV2RGB_b(int _dstcn, int _blueIdx, int _hrange)
     : dstcn(_dstcn), cvt(3, _blueIdx, (float)_hrange)
@@ -4724,7 +6322,7 @@ struct HSV2RGB_b
 
 struct RGB2HLS_f
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2HLS_f(int _srccn, int _blueIdx, float _hrange)
     : srccn(_srccn), blueIdx(_blueIdx), hrange(_hrange) {}
@@ -4778,7 +6376,7 @@ struct RGB2HLS_f
 
 struct RGB2HLS_b
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2HLS_b(int _srccn, int _blueIdx, int _hrange)
     : srccn(_srccn), cvt(3, _blueIdx, (float)_hrange)
@@ -4966,7 +6564,7 @@ struct RGB2HLS_b
 
 struct HLS2RGB_f
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     HLS2RGB_f(int _dstcn, int _blueIdx, float _hrange)
     : dstcn(_dstcn), blueIdx(_blueIdx), hscale(6.f/_hrange) {}
@@ -5030,7 +6628,7 @@ struct HLS2RGB_f
 
 struct HLS2RGB_b
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     HLS2RGB_b(int _dstcn, int _blueIdx, int _hrange)
     : dstcn(_dstcn), cvt(3, _blueIdx, (float)_hrange)
@@ -5307,7 +6905,7 @@ static void initLabTabs()
 
 struct RGB2Lab_b
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2Lab_b(int _srccn, int blueIdx, const float* _coeffs,
               const float* _whitept, bool _srgb)
@@ -5378,7 +6976,7 @@ struct RGB2Lab_b
 
 struct RGB2Lab_f
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2Lab_f(int _srccn, int blueIdx, const float* _coeffs,
               const float* _whitept, bool _srgb)
@@ -5455,7 +7053,7 @@ struct RGB2Lab_f
 
 struct Lab2RGB_f
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     Lab2RGB_f( int _dstcn, int blueIdx, const float* _coeffs,
               const float* _whitept, bool _srgb )
@@ -5707,7 +7305,7 @@ struct Lab2RGB_f
 
 struct Lab2RGB_b
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     Lab2RGB_b( int _dstcn, int blueIdx, const float* _coeffs,
                const float* _whitept, bool _srgb )
@@ -5936,7 +7534,7 @@ struct Lab2RGB_b
 
 struct RGB2Luv_f
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     RGB2Luv_f( int _srccn, int blueIdx, const float* _coeffs,
                const float* whitept, bool _srgb )
@@ -6135,7 +7733,7 @@ struct RGB2Luv_f
 
 struct Luv2RGB_f
 {
-    typedef float channel_type;
+    typedef float src_channel_type; typedef float dst_channel_type;
 
     Luv2RGB_f( int _dstcn, int blueIdx, const float* _coeffs,
               const float* whitept, bool _srgb )
@@ -6342,7 +7940,7 @@ struct Luv2RGB_f
 
 struct RGB2Luv_b
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     RGB2Luv_b( int _srccn, int blueIdx, const float* _coeffs,
                const float* _whitept, bool _srgb )
@@ -6542,7 +8140,7 @@ struct RGB2Luv_b
 
 struct Luv2RGB_b
 {
-    typedef uchar channel_type;
+    typedef uchar src_channel_type; typedef uchar dst_channel_type;
 
     Luv2RGB_b( int _dstcn, int blueIdx, const float* _coeffs,
                const float* _whitept, bool _srgb )
@@ -7342,7 +8940,7 @@ inline void cvtYUV422toRGBA(uchar * dst_data, size_t dst_step, const uchar * src
 template<typename _Tp>
 struct RGBA2mRGBA
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     void operator()(const _Tp* src, _Tp* dst, int n) const
     {
@@ -7367,7 +8965,7 @@ struct RGBA2mRGBA
 template<typename _Tp>
 struct mRGBA2RGBA
 {
-    typedef _Tp channel_type;
+    typedef _Tp src_channel_type; typedef _Tp dst_channel_type;
 
     void operator()(const _Tp* src, _Tp* dst, int n) const
     {
@@ -9371,6 +10969,1224 @@ void cv::cvtColor( InputArray _src, OutputArray _dst, int code, int dcn )
             CV_Error( CV_StsBadFlag, "Unknown/unsupported color conversion code" );
         }
 }
+
+// The transform to the new color space is (T vec - 255 TMin)/TRange. 255 is the range of 8bit RGB and can be replaced directly with a different range for 16 and 32 bit RGB spaces. The division by TRange is the direct element wise division and can safely be rounded to recast in the required bit depth.
+
+
+
+// ***************************************************************************************************************************
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::setWOBOSlackValue( double slack){
+    WOBOslackvalue = slack;
+    findWOBOLimits();
+};
+
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::setRGBIndices(int _srcBlueIdx, int _dstBlueIdx){
+    int srcBlueIdx, dstBlueIdx;
+    if (_srcBlueIdx==3) {
+        srcBlueIdx = 2; // Someone has accidentally used 1,2,3 indexes rather than 0,1,2
+    } else {
+        srcBlueIdx = _srcBlueIdx % 3;
+    }
+    if (_dstBlueIdx==3) {
+        dstBlueIdx = 2; // Someone has accidentally used 1,2,3 indexes rather than 0,1,2
+    } else {
+        dstBlueIdx = _dstBlueIdx % 3;
+    }
+    srcIndx[0] = (srcBlueIdx+2)%4; srcIndx[1] = 1; srcIndx[2] = srcBlueIdx; // (blueIdx+2)%4 = 2 if blueIdx = 0
+    dstIndx[0] = (dstBlueIdx+2)%4; dstIndx[1] = 1; dstIndx[2] = dstBlueIdx; //                 0 if blueIdx = 2
+    
+};
+
+//template<int src_t, int dst_t> cv::Vec<typename cv::Signed_Work_Type<src_t, dst_t>::type, 3> cv::RGB2Rot<src_t, dst_t>::toWrk(Vec<double, 3> pnt){
+//    Vec<typename cv::Signed_Work_Type<src_t, dst_t>::type, 3> out;
+//    out[0] = RRange[0] * pnt(0)+ RMin[0];
+//    out[1] = RRange[1] * pnt(1)+ RMin[1];
+//    out[2] = RRange[2] * pnt(2)+ RMin[2];
+//    return out;
+//};
+//template<int src_t, int dst_t> cv::Vec<typename cv::Data_Type<src_t>::type, 3> cv::RGB2Rot<src_t, dst_t>::toSrc(Vec<double, 3> pnt){
+//    Vec<typename cv::Data_Type<src_t>::type, 3> out;
+//    out[0] = srcType((srcInfo::max - srcInfo::min) * pnt(0)+ srcInfo::min);
+//    out[1] = srcType((srcInfo::max - srcInfo::min) * pnt(1)+ srcInfo::min);
+//    out[2] = srcType((srcInfo::max - srcInfo::min) * pnt(2)+ srcInfo::min);
+//    return out;
+//};
+//template<int src_t, int dst_t> cv::Vec<typename cv::Data_Type<dst_t>::type, 3> cv::RGB2Rot<src_t, dst_t>::toDst(Vec<double, 3> pnt){
+//    Vec<typename cv::Data_Type<dst_t>::type, 3> out;
+//    out[0] = dstType((dstInfo::max - dstInfo::min) * pnt(0)+ dstInfo::min);
+//    out[1] = dstType((dstInfo::max - dstInfo::min) * pnt(1)+ dstInfo::min);
+//    out[2] = dstType((dstInfo::max - dstInfo::min) * pnt(2)+ dstInfo::min);
+//    return out;
+//};
+//
+
+
+template<int src_t, int dst_t> cv::Matx<double, 1, 3> cv::RGB2Rot<src_t, dst_t>::fromRot(Matx<double, 1, 3> src){
+    double rot[3];
+    fromRot(src.val, rot);
+    cv::Matx<double, 1, 3> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> cv::Matx<double, 3, 1> cv::RGB2Rot<src_t, dst_t>::fromRot(Matx<double, 3, 1> src){
+    double rot[3];
+    fromRot(src.val, rot);
+    cv::Matx<double, 3, 1> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> cv::Vec<double, 3> cv::RGB2Rot<src_t, dst_t>::fromRot(Vec<double, 3> src){
+    double rot[3];
+    fromRot(src.val, rot);
+    cv::Vec<double, 3> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::fromRot(double src[3], double dst[3]){
+    // This function performs the inverse of pnt = iL rRScale (rR . out) + {0,.5,.5}
+    // Becasue inv( iL rRScale rR ) = Transpose( iL rRScale rR )
+    
+    cv::Vec<double,3> rRScaleXiLXpnt, rot;
+    
+    rRScaleXiLXpnt(0) = rRScale(0)*L(0)*(src[dstIndx[0]]);
+    rRScaleXiLXpnt(1) = rRScale(1)*L(1)*(src[dstIndx[1]]-0.5);
+    rRScaleXiLXpnt(2) = rRScale(2)*L(2)*(src[dstIndx[2]]-0.5);
+    rot = rR.t()*rRScaleXiLXpnt;
+    dst[srcIndx[0]] = rot(0); dst[srcIndx[1]] = rot(1); dst[srcIndx[2]] = rot(2);
+};
+
+
+
+template<int src_t, int dst_t> cv::Matx<double, 1, 3> cv::RGB2Rot<src_t, dst_t>::toRot(Matx<double, 1, 3> src){
+    double rot[3];
+    toRot(src.val, rot);
+    cv::Matx<double, 1, 3> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> cv::Matx<double, 3, 1> cv::RGB2Rot<src_t, dst_t>::toRot(Matx<double, 3, 1> src){
+    double rot[3];
+    toRot(src.val, rot);
+    cv::Matx<double, 3, 1> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> cv::Vec<double, 3> cv::RGB2Rot<src_t, dst_t>::toRot(Vec<double, 3> src){
+    double rot[3];
+    toRot(src.val, rot);
+    cv::Vec<double, 3> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::toRot(double src[3], double dst[3]){
+    // src is assumed to be in the 0:1 unit range.
+    // The ordering of the src elemebts is specified by the blue index specified in the constructor.
+    // out will be in the 0:1 unit range but in the LCaCb space.
+    dst[dstIndx[0]] = rRScale(0)*iL(0)*(src[srcIndx[0]]*rR(0,0) + src[srcIndx[1]]*rR(0,1) + src[srcIndx[2]]*rR(0,2)); // CV_DESCALE(x,n) = (((x) + (1 << ((n)-1))) >> (n))
+    dst[dstIndx[1]] = rRScale(1)*iL(1)*(src[srcIndx[0]]*rR(1,0) + src[srcIndx[1]]*rR(1,1) + src[srcIndx[2]]*rR(1,2))+0.5; // could be used in place of * scale
+    dst[dstIndx[2]] = rRScale(2)*iL(2)*(src[srcIndx[0]]*rR(2,0) + src[srcIndx[1]]*rR(2,1) + src[srcIndx[2]]*rR(2,2))+0.5; // Find shift which fits RRange into the desired bit depth.
+};
+
+
+
+template<int src_t, int dst_t> cv::Matx<double, 1, 3> cv::RGB2Rot<src_t, dst_t>::fromRot_(Matx<double, 1, 3> src){
+    double rot[3];
+    fromRot_(src.val, rot);
+    cv::Matx<double, 1, 3> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> cv::Matx<double, 3, 1> cv::RGB2Rot<src_t, dst_t>::fromRot_(Matx<double, 3, 1> src){
+    double rot[3];
+    fromRot_(src.val, rot);
+    cv::Matx<double, 3, 1> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> cv::Vec<double, 3> cv::RGB2Rot<src_t, dst_t>::fromRot_(Vec<double, 3> src){
+    double rot[3];
+    fromRot_(src.val, rot);
+    cv::Vec<double, 3> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::fromRot_(double src[3], double dst[3]){
+    // This function performs the inverse of pnt = iL rRScale (rR . out) + {0,.5,.5}
+    // Becasue inv( iL rRScale rR ) = Transpose( iL rRScale rR )
+    
+    cv::Vec<double,3> rRScaleXiLXpnt, out ;
+    
+    rRScaleXiLXpnt(0) = rRScale(0)*L(0)*(src[0]);
+    rRScaleXiLXpnt(1) = rRScale(1)*L(1)*(src[1]-0.5);
+    rRScaleXiLXpnt(2) = rRScale(2)*L(2)*(src[2]-0.5);
+//    fprintf(stdout, "rRScaleXiLXpnt = {%f, %f, %f}\n", rRScaleXiLXpnt(0),  rRScaleXiLXpnt(1), rRScaleXiLXpnt(2)  );
+    
+    out = rR.t()*rRScaleXiLXpnt;
+    dst[0] = out(0); dst[1] = out(1); dst[2] = out(2);
+};
+
+
+
+template<int src_t, int dst_t> cv::Matx<double, 1, 3> cv::RGB2Rot<src_t, dst_t>::toRot_(Matx<double, 1, 3> src){
+    double rot[3];
+    toRot_(src.val, rot);
+    cv::Matx<double, 1, 3> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> cv::Matx<double, 3, 1> cv::RGB2Rot<src_t, dst_t>::toRot_(Matx<double, 3, 1> src){
+    double rot[3];
+    toRot_(src.val, rot);
+    cv::Matx<double, 3, 1> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> cv::Vec<double, 3> cv::RGB2Rot<src_t, dst_t>::toRot_(Vec<double, 3> src){
+    double rot[3];
+    toRot_(src.val, rot);
+    cv::Vec<double, 3> out(rot[0],rot[1],rot[2]);
+    return out;
+};
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::toRot_(double src[3], double dst[3]){
+    // src is assumed to be in the 0:1 unit range.
+    // out will be in the 0:1 unit range but in the LCaCb space.
+    dst[0] = rRScale(0)*iL(0)*(src[0]*rR(0,0) + src[1]*rR(0,1) + src[2]*rR(0,2)); // CV_DESCALE(x,n) = (((x) + (1 << ((n)-1))) >> (n))
+    dst[1] = rRScale(1)*iL(1)*(src[0]*rR(1,0) + src[1]*rR(1,1) + src[2]*rR(1,2))+0.5; // could be used in place of * scale
+    dst[2] = rRScale(2)*iL(2)*(src[0]*rR(2,0) + src[1]*rR(2,1) + src[2]*rR(2,2))+0.5; // Find shift which fits RRange into the desired bit depth.
+};
+
+
+template<int src_t, int dst_t> cv::Matx<double,3,2> cv::RGB2Rot<src_t, dst_t>:: fromRotRanges( cv::Matx<double,3,2> rng ){
+    cv::Matx<double,8,3> rngCube{rng(0,0),rng(1,0),rng(2,0),
+                                 rng(0,0),rng(1,0),rng(2,1),
+                                 rng(0,0),rng(1,1),rng(2,0),
+                                 rng(0,0),rng(1,1),rng(2,1),
+                                 rng(0,1),rng(1,0),rng(2,0),
+                                 rng(0,1),rng(1,0),rng(2,1),
+                                 rng(0,1),rng(1,1),rng(2,0),
+                                 rng(0,1),rng(1,1),rng(2,1) };
+    
+    cv::Matx<double,3,2> rngRGB{1.,0.,1.,0.,1.,0.};
+    
+    for (int i=0; i<8; i++) {
+        cv::Matx<double,1,3> rgb = fromRot_(rngCube.row(i));
+        
+        for (int j=0; j<3; j++) {
+            if (rngRGB(j,0) >= rgb(j)) { rngRGB(j,0) = rgb(j);}
+            if (rngRGB(j,1) <= rgb(j)) { rngRGB(j,1) = rgb(j);}
+        }
+    }
+    for (int j=0; j<3; j++) {
+        if (rngRGB(j,0) < 0.) { rngRGB(j,0) = 0.;}
+        if (rngRGB(j,1) > 1.) { rngRGB(j,1) = 1.;}
+    }
+
+    return rngRGB;
+}
+
+template<int src_t, int dst_t> cv::Matx<double,3,2> cv::RGB2Rot<src_t, dst_t>:: toRotRanges( cv::Matx<double,3,2> rng ){
+    cv::Matx<double,3,1> rgb1 = toRot_(rng.col(0)), rgb2 = toRot_(rng.col(1));
+    cv::Matx<double,3,2> rgb;
+    
+    for (int i=0; i<3; i++) {
+        if (rgb1(i)< rgb2(i)) {
+            rgb(i,0) = rgb1(i); rgb(i,1) = rgb2(i);
+        } else {
+            rgb(i,0) = rgb2(i); rgb(i,1) = rgb1(i);
+        }
+    }
+    return rgb;
+}
+
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::setReducedRotationMatrix(double theta )
+{
+    
+    double Cos      = std::cos(theta);    double CosPlus  = std::cos(CV_PI/6. + theta);    double CosMinus = std::cos(CV_PI/6. - theta);
+    double Sin      = std::sin(theta);    double SinPlus  = std::sin(CV_PI/6. + theta);    double SinMinus = std::sin(CV_PI/6. - theta);
+    
+    rR = cv::Matx<double, 3, 3>( 1.,       1.,   1., \
+                                -SinPlus,  Cos, -SinMinus, \
+                                -CosPlus, -Sin,  CosMinus );
+    
+    //  rRScale scales to give the unscaled rotated ranges.
+    rRScale = Vec<double, 3>(std::sqrt(0.333333333333333333333), std::sqrt(0.666666666666666666666), std::sqrt(0.666666666666666666666));
+    
+}
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::setIntegerRotationMatrix(double theta )
+{
+    using sSrcType = typename cv::Data_Type<src_t>::sType;
+    // Generate the integer rotation matrix.
+    double theta1 = std::fmod(theta, CV_PI/6.);
+    
+    srcType bI = ((1<<srcInfo::bitDepth-3)); // bI = 2^(n-3)
+    sSrcType Ap, Am, Bp, Bm, U;
+    Ap = bI + sSrcType(round(bI * sqrt(3.0) * tan(theta1)));
+    Am = bI - sSrcType(round(bI * sqrt(3.0) * tan(theta1)));
+    Bp = bI + sSrcType(round(bI * sqrt(3.0) * tan(CV_PI/6.0 - theta1)));
+    Bm = bI - sSrcType(round(bI * sqrt(3.0) * tan(CV_PI/6.0 - theta1)));
+    U  = -1*((1<<(srcInfo::bitDepth-2))); // bI = 2^(n-2)
+    
+    switch (int(std::floor(6* (std::fmod(theta, CV_PI))/CV_PI)))
+    {
+        case 0:
+            qRs = cv::Matx<sWrkType, 3, 3>(    1,     1,     1,\
+                                           -1*Ap,  -1*U, -1*Am,\
+                                           -1*Bp, -1*Bm,  -1*U
+                                           );
+            break;
+        case 1:
+            qRs = cv::Matx<sWrkType, 3, 3>(    1,     1,     1,\
+                                               U,    Bp,    Bm,\
+                                           -1*Am, -1*Ap,  -1*U
+                                           );
+            break;
+        case 2:
+            qRs = cv::Matx<sWrkType, 3, 3>(    1,     1,     1,\
+                                               U,    Am,    Ap,\
+                                              Bm,     U,    Bp
+                                           );
+            break;
+        case 3:
+            qRs = cv::Matx<sWrkType, 3, 3>(    1,     1,     1,\
+                                           -1*Bp, -1*Bm,  -1*U,\
+                                              Ap,     U,    Am
+                                           );
+            break;
+        case 4:
+            qRs = cv::Matx<sWrkType, 3, 3>(    1,     1,     1,\
+                                           -1*Am, -1*Ap,  -1*U,\
+                                            -1*U, -1*Bp, -1*Bm
+                                           );
+            break;
+        case 5:
+            qRs = cv::Matx<sWrkType, 3, 3>(    1,     1,     1,\
+                                              Bm,     U,    Bp,\
+                                            -1*U, -1*Am, -1*Ap
+                                           );
+            break;
+        default:
+            qRs = cv::Matx<sWrkType, 3, 3>(    1,     1,     1,\
+                                           -1*Ap,  -1*U, -1*Am,\
+                                           -1*Bp, -1*Bm,  -1*U
+                                           );
+    };
+    int n=srcInfo::bitDepth;
+    qRsMin   = *new cv::Vec<sWrkType,3>(             0, (1<<(n-2))-(1<<(2*n-2)), (1<<(n-2))-(1<<(2*n-2)) );
+    qRsMax   = *new cv::Vec< wrkType,3>(  3*((1<<n)-1), (1<<(2*n-2))-(1<<(n-2)), (1<<(2*n-2))-(1<<(n-2)) );
+    qRsRange = *new cv::Vec< wrkType,3>(  3*((1<<n)-1), (1<<(n-1))*((1<<n)-1),   (1<<(n-1))*((1<<n)-1) );
+    
+    S(0) = srcL(0)*(1.0/3.0);
+    S(1) = srcL(1)*(1.0/(1<<(n-1)));
+    S(2) = srcL(2)*(1.0/(1<<(n-1)));
+    
+}
+
+template<int src_t, int dst_t> typename cv::Matx<double,6,3> cv::RGB2Rot<src_t, dst_t>:: WOBOpath( cv::Vec<double,3> pnt_ ){
+//    fprintf(stdout,"Thread %d : RGB2Rot : WOBOpathIn = {%f, %f, %f}\n",getThreadNum(), pnt_(0),pnt_(1),pnt_(2));
+    Vec<double,3> pnt = fromRot(pnt_);
+//    fprintf(stdout,"Thread %d : RGB2Rot : WOBOpathPnt = {%f, %f, %f}\n",getThreadNum(), pnt(0),pnt(1),pnt(2));
+    cv::Matx<double,6,3> rgbPath, out;
+    cv::Vec<int,3> order;
+    if (pnt(0)<pnt(1)) {
+        if (pnt(1)<pnt(2)) {
+            order = cv::Vec<int,3> {0,1,2};     // pnt(0) <= pnt(1) <= pnt(2)
+        } else {
+            // pnt(0) < pnt(1) && pnt(2) <= pnt(1)
+            if (pnt(0)<pnt(2)) {
+                order = cv::Vec<int,3> {0,2,1}; // pnt(0) <  pnt(2) <= pnt(1)
+            } else {
+                order = cv::Vec<int,3> {2,0,1}; // pnt(2) <= pnt(0) <= pnt(1)
+            }
+        }
+    } else {
+        // pnt(1) <= pnt(0)
+        if (pnt(0) < pnt(2)) {
+            order = cv::Vec<int,3> {1,0,2};     // pnt(1) <= pnt(0) < pnt(2)
+        } else {
+            // pnt(2) <= pnt(0) && pnt(1) <= pnt(0)
+            if (pnt(1)<pnt(2)) {
+                order = cv::Vec<int,3> {1,2,0}; // pnt(1) <  pnt(2) <= pnt(0)
+            } else {
+                order = cv::Vec<int,3> {2,1,0}; // pnt(2) <= pnt(1) <= pnt(0)
+            }
+        }
+    }
+    double a = pnt(order(0)), b = pnt(order(1)), c = pnt(order(2));
+//    fprintf(stdout,"Thread %d : RGB2Rot : WOBOpath : {a,b,c} = {%f, %f, %f} = {%f, %f, %f}\n",getThreadNum(), a, b, c, pnt(order(0)), pnt(order(1)), pnt(order(2)));
+    rgbPath(0,order(0)) = 0.;        rgbPath(0,order(1)) = 0.;        rgbPath(0,order(2)) = 0.;
+    rgbPath(1,order(0)) = 0.;        rgbPath(1,order(1)) = 0.;        rgbPath(1,order(2)) = c - b;
+    rgbPath(2,order(0)) = 0.;        rgbPath(2,order(1)) = b - a;     rgbPath(2,order(2)) = c - a;
+    rgbPath(3,order(0)) = a + (1-c); rgbPath(3,order(1)) = b + (1-c); rgbPath(3,order(2)) = 1.;
+    rgbPath(4,order(0)) = a + (1-b); rgbPath(4,order(1)) = 1.;        rgbPath(4,order(2)) = 1.;
+    rgbPath(5,order(0)) = 1.;        rgbPath(5,order(1)) = 1.;        rgbPath(5,order(2)) = 1.;
+    for (int i=0; i<=5; i++) {
+        Vec<double,3> temp = toRot(Vec<double,3>{rgbPath(i,0), rgbPath(i,1), rgbPath(i,2)});
+        out(i,0) = temp(0); out(i,1) = temp(1); out(i,2) = temp(2);
+    }
+    
+    return out;
+}
+
+template<int src_t, int dst_t> double cv::RGB2Rot<src_t, dst_t>:: WOBOslack( double val , bool minQ, double slack){
+    if (minQ) {
+        return (1-slack)*val;
+    } else {
+        return (1+slack)*val;
+    }
+}
+
+template<int src_t, int dst_t> bool cv::RGB2Rot<src_t, dst_t>:: uWOBO( double L, double Ca, double Cb){
+  return (uWOBOLimits(0,0) > L  || L  > uWOBOLimits(0,1)) &&
+         (uWOBOLimits(1,0) < Ca && Ca < uWOBOLimits(1,1)) &&
+         (uWOBOLimits(2,0) < Cb && Cb < uWOBOLimits(2,1));
+}
+
+template<int src_t, int dst_t> bool cv::RGB2Rot<src_t, dst_t>:: qWOBO( sWrkType L, sWrkType Ca, sWrkType Cb) const {
+//    fprintf(stdout,"Thread %d : %hd > %hd || %hd > %hd \n",getThreadNum(), qWOBOLimits(0,0), L, L, qWOBOLimits(0,1));
+//    fprintf(stdout,"Thread %d : %hd < %hd < %hd \n",getThreadNum(), qWOBOLimits(1,0), Ca, qWOBOLimits(1,1));
+//    fprintf(stdout,"Thread %d : %hd < %hd < %hd \n",getThreadNum(), qWOBOLimits(2,0), Cb, qWOBOLimits(2,1));
+    return (qWOBOLimits(0,0) > L  || L  > qWOBOLimits(0,1)) &&
+           (qWOBOLimits(1,0) < Ca && Ca < qWOBOLimits(1,1)) &&
+           (qWOBOLimits(2,0) < Cb && Cb < qWOBOLimits(2,1));
+}
+
+template<int src_t, int dst_t> bool cv::RGB2Rot<src_t, dst_t>:: color(dstType Ca, dstType Cb) const {
+    return (dColorLimits(0,0) < Ca && Ca < dColorLimits(0,1)) &&
+           (dColorLimits(1,0) < Cb && Cb < dColorLimits(1,1));
+}
+
+template<int src_t, int dst_t>  uchar cv::RGB2Rot<src_t, dst_t>:: classifier( bool wobo, bool color) const {
+    return (color<<1) + (wobo ^ color);
+}
+
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::suggestNewAngle_relativeImportanceOfTheChannels(double theta )
+{
+    // Find the relative importance of the channels.
+    Vec<int,3> lossyElementsQ;
+    
+    lossyElementsQ=dqAS(theta + CV_PI/2.0);
+    double maxLoss1=0.0;
+    for (int i=0; i<3; i++) {
+        if (lossyElementsQ(i)) {
+            if (lambdaRGB(i,1)>maxLoss1) {
+                maxLoss1 = lambdaRGB(i,1);
+            }
+        }
+    }
+    lossyElementsQ=dqAS(theta);
+    double maxLoss2=0.0;
+    for (int i=0; i<3; i++) {
+        if (lossyElementsQ(i)) {
+            if (lambdaRGB(i,1)>maxLoss2) {
+                maxLoss2 = lambdaRGB(i,1);
+            }
+        }
+    }
+
+    if (std::fmod(theta, CV_PI/3.) < CV_PI/6.0) { // This is dqEO
+        alpha = 2.0 * srcL(1) * maxLoss1;
+        beta  = 2.0 * srcL(2) * maxLoss2;
+    } else {
+        beta  = 2.0 * srcL(1) * maxLoss1;
+        alpha = 2.0 * srcL(2) * maxLoss2;
+    }
+}
+
+
+template<int src_t, int dst_t> double cv::RGB2Rot<src_t, dst_t>::suggestNewAngle(double theta )
+{
+    double theta1 = std::fmod(theta, CV_PI/6.);
+    
+    // Find the relative importance of the channels.
+    suggestNewAngle_relativeImportanceOfTheChannels(theta);
+    
+    // Find a starting index.
+    double tol = 1.0;
+    srcType bI = ((1<<srcInfo::bitDepth-3)); // bI = 2^(n-3)
+    double indx = bI * std::tan(theta1) * (sqrt(3.0) * std::tan(theta1) +7)/(std::tan(theta1) + sqrt(3.0)); // The intersection index
+    
+    // Suggest a new angle
+    double angle, pert;
+    int indxP = std::ceil(indx),indxM = std::floor(indx);
+    
+    cv::Vec<double,2> anglePertP, anglePertM;
+    anglePertP = chanPerturbation(indxP, alpha, beta, srcInfo::bitDepth);
+    anglePertM = chanPerturbation(indxM, alpha, beta, srcInfo::bitDepth);
+    
+    while (anglePertP(1) > tol) {// ToDo : maybe check for infinite loop condition.
+        indxP++;
+        anglePertP = chanPerturbation(indxP, alpha, beta, srcInfo::bitDepth);
+    }
+    while (anglePertM(1) > tol) {// ToDo : maybe check for infinite loop condition.
+        indxM--;
+        anglePertM = chanPerturbation(indxM, alpha, beta, srcInfo::bitDepth);
+    }
+    if (anglePertP(0) - theta1 < theta1 - anglePertM(0)) {
+        angle = theta + anglePertP(0) - theta1;
+        pert = anglePertP(1);
+    } else {
+        angle = theta - theta1 + anglePertM(0);
+        pert = anglePertM(1);
+    }
+    
+    return angle;
+}
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::findWOBOLimits()
+{
+    // Find WOBO limits
+    cv::Vec<double,3> cornerA{ LParam.uC, CaParam.uLambda1, CbParam.uLambda1 };
+    cv::Vec<double,3> cornerB{ LParam.uC, CaParam.uLambda2, CbParam.uLambda1 };
+    cv::Vec<double,3> cornerC{ LParam.uC, CaParam.uLambda1, CbParam.uLambda2 };
+    cv::Vec<double,3> cornerD{ LParam.uC, CaParam.uLambda2, CbParam.uLambda2 };
+    
+    Matx<double,6,3> WOBOpathA = WOBOpath(cornerA), WOBOpathB = WOBOpath(cornerB), WOBOpathC = WOBOpath(cornerC), WOBOpathD = WOBOpath(cornerD);
+    
+    Vec<double,3> pathMins{0.,1.,1.}, pathMaxs{1.,0.,0.};
+    // We need to find the L values above and below the mid point luminocity.
+    // This makes the min and max for the luminocity reversed.
+    if(pathMaxs(0)>WOBOpathA(3,0)){  pathMaxs(0)=WOBOpathA(3,0); }
+    if(pathMaxs(0)>WOBOpathB(3,0)){  pathMaxs(0)=WOBOpathB(3,0); }
+    if(pathMaxs(0)>WOBOpathC(3,0)){  pathMaxs(0)=WOBOpathC(3,0); }
+    if(pathMaxs(0)>WOBOpathD(3,0)){  pathMaxs(0)=WOBOpathD(3,0); }
+    
+    if(pathMins(0)<WOBOpathA(2,0)){  pathMins(0)=WOBOpathA(2,0); }
+    if(pathMins(0)<WOBOpathB(2,0)){  pathMins(0)=WOBOpathB(2,0); }
+    if(pathMins(0)<WOBOpathC(2,0)){  pathMins(0)=WOBOpathC(2,0); }
+    if(pathMins(0)<WOBOpathD(2,0)){  pathMins(0)=WOBOpathD(2,0); }
+    
+    for (int i=0; i<=5; i++) {
+        for (int j=1; j<3; j++) {
+            if(pathMins(j)>WOBOpathA(i,j)){  pathMins(j)=WOBOpathA(i,j); }
+            if(pathMins(j)>WOBOpathB(i,j)){  pathMins(j)=WOBOpathB(i,j); }
+            if(pathMins(j)>WOBOpathC(i,j)){  pathMins(j)=WOBOpathC(i,j); }
+            if(pathMins(j)>WOBOpathD(i,j)){  pathMins(j)=WOBOpathD(i,j); }
+            if(pathMaxs(j)<WOBOpathA(i,j)){  pathMaxs(j)=WOBOpathA(i,j); }
+            if(pathMaxs(j)<WOBOpathB(i,j)){  pathMaxs(j)=WOBOpathB(i,j); }
+            if(pathMaxs(j)<WOBOpathC(i,j)){  pathMaxs(j)=WOBOpathC(i,j); }
+            if(pathMaxs(j)<WOBOpathD(i,j)){  pathMaxs(j)=WOBOpathD(i,j); }
+        }
+    }
+    
+    // Set the properies with an amount of slack
+    uWOBOLimits(0,0) = pathMins(0);
+    uWOBOLimits(0,1) = pathMaxs(0);
+    
+    for (int j=1; j<3; j++) {
+        uWOBOLimits(j,0) = WOBOslack(pathMins(j), true,  WOBOslackvalue);
+        uWOBOLimits(j,1) = WOBOslack(pathMaxs(j), false, WOBOslackvalue);
+    }
+    
+    for (int j=0; j<3; j++) {
+        qWOBOLimits(j,0) =  qRsRange(j) * uWOBOLimits(j,0) +  qRsMin(j);
+        qWOBOLimits(j,1) =  qRsRange(j) * uWOBOLimits(j,1) +  qRsMin(j);
+        
+    }
+    
+};
+
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::setTransformFromAngle(double theta )
+{
+    
+    setReducedRotationMatrix(theta );
+    
+    // Find Lambda2 equivalent in RGB
+    
+    lambdaLCaCb(dstIndx[0],0) = LParam.uLambda1; lambdaLCaCb(dstIndx[1],0) = CaParam.uLambda1; lambdaLCaCb(dstIndx[2],0) = CbParam.uLambda1;
+    lambdaLCaCb(dstIndx[0],1) = LParam.uLambda2; lambdaLCaCb(dstIndx[1],1) = CaParam.uLambda2; lambdaLCaCb(dstIndx[2],1) = CbParam.uLambda2;
+    
+    lambdaRGB = fromRotRanges(lambdaLCaCb);
+    
+    double angle = suggestNewAngle( theta );
+    
+    setIntegerRotationMatrix( angle );
+ 
+    // Design the distribution function.
+    
+    LDist  = distributeScaled( LParam, double(S(0)),double(qRsRange(0)),double(qRsMin(0)));
+    CaDist = distributeScaled(CaParam, double(S(1)),double(qRsRange(1)),double(qRsMin(1)));
+    CbDist = distributeScaled(CbParam, double(S(2)),double(qRsRange(2)),double(qRsMin(2)));
+    
+    // Find WOBO limits
+    findWOBOLimits();
+    
+    // Set Color Limits.
+    dColorLimits = *new Matx<dstType,2,2> {CaParam.disMin+1, CaParam.disMax-1, \
+                                           CbParam.disMin+1, CbParam.disMax-1};
+    
+};
+
+#define WOBO_SLACK_VALUE_DEFAULT 0.1
+
+template<int src_t, int dst_t> cv::RGB2Rot<src_t, dst_t>::RGB2Rot(const int srcBlueIdx, const int dstBlueIdx, const double theta, cv::Vec<double, 3> _uSG, cv::Vec<double, 3> _uC){
+    WOBOslackvalue = WOBO_SLACK_VALUE_DEFAULT;
+    // _uC and _uG are assumed to be in the dst axis ordering.
+    setRGBIndices(srcBlueIdx, dstBlueIdx);
+    setAxisLengths(theta);
+    setDistParams(_uSG, _uC);
+    setTransformFromAngle(theta);
+};
+
+template<int src_t, int dst_t> cv::RGB2Rot<src_t, dst_t>::RGB2Rot(const int srcBlueIdx, const int dstBlueIdx, const double theta, std::vector<double> _uSG, std::vector<double> _uC){
+    WOBOslackvalue = WOBO_SLACK_VALUE_DEFAULT;
+    setRGBIndices(srcBlueIdx, dstBlueIdx);
+    cv::Vec<double, 3> uC{_uC[0],_uC[1],_uC[2]};
+    cv::Vec<double, 3> uSG{_uSG[0],_uSG[1],_uSG[2]};
+    setAxisLengths(theta);
+    setDistParams(uSG, uC);
+    setTransformFromAngle(theta);
+};
+template<int src_t, int dst_t> cv::RGB2Rot<src_t, dst_t>::RGB2Rot(const int srcBlueIdx, const int dstBlueIdx, const double theta,
+                                                                  distributeErfParameters<sWrkInfo::channelType, dstInfo::channelType> _LParam,
+                                                                  distributeErfParameters<sWrkInfo::channelType, dstInfo::channelType> _CaParam,
+                                                                  distributeErfParameters<sWrkInfo::channelType, dstInfo::channelType> _CbParam){
+    WOBOslackvalue = WOBO_SLACK_VALUE_DEFAULT;
+    setRGBIndices(srcBlueIdx, dstBlueIdx);
+    setAxisLengths(theta);
+    setDistParams( _LParam, _CaParam, _CbParam);
+    setTransformFromAngle(theta);
+};
+template<int src_t, int dst_t> cv::RGB2Rot<src_t, dst_t>::RGB2Rot(){
+    WOBOslackvalue = WOBO_SLACK_VALUE_DEFAULT;
+    double theta = 0.0;
+    cv::Vec<double, 3> uG(-0.2,-0.2,-0.2),  uC(0.5,0.5,0.5);
+    setRGBIndices(2, 2);
+    setAxisLengths(theta);
+    setDistParams(uG, uC);
+    setTransformFromAngle(0.0);
+}
+template<int src_t, int dst_t> cv::RGB2Rot<src_t, dst_t>::RGB2Rot(cv::RGB2Rot<src_t, dst_t>& rhs){
+    WOBOslackvalue = rhs.WOBOslackvalue;
+    dstIndx[0] = rhs.dstIndx[0]; dstIndx[1] = rhs.dstIndx[1]; dstIndx[2] = rhs.dstIndx[2];// indices for the destination 'RGB' channels
+    srcIndx[0] = rhs.srcIndx[0]; srcIndx[1] = rhs.srcIndx[1]; srcIndx[2] = rhs.srcIndx[2];// indices for the source RGB channels
+    L    = rhs.L;    // The rotated axis lengths
+    iL   = rhs.iL;   // The reciprocal of the rotated axis lengths
+    srcL = rhs.srcL; // The required axis lengths
+    
+    lambdaLCaCb = rhs.lambdaLCaCb; // The discard region in the LCaCb space
+    lambdaRGB = rhs.lambdaRGB;     // The discard region in the RGB space
+    alpha = rhs.alpha; beta = rhs.beta;  // The relative importance of the chromatic channels.
+    
+    rR = rhs.rR;
+    
+    rRScale = rhs.rRScale;
+    RMin = rhs.RMin; RMax = rhs.RMax; RRange = rhs.RRange;
+    
+    qRs    = rhs.qRs;
+    qRsMin = rhs.qRsMin; qRsMax = rhs.qRsMax; qRsRange = rhs.qRsRange;
+    
+    S = rhs.S;
+    
+    uWOBOLimits = rhs.uWOBOLimits;
+    qWOBOLimits = rhs.qWOBOLimits;
+    dColorLimits = rhs.dColorLimits;
+    
+//    uRMin = rhs.uRMin; uRMax = rhs.uRMax; uRRange = rhs.uRRange;
+    
+    distParam[0] = rhs.distParam[0]; distParam[1] = rhs.distParam[1]; distParam[2] = rhs.distParam[2];
+    LParam = rhs.LParam; CaParam = rhs.CaParam; CbParam = rhs.CbParam;
+    LDist = rhs.LDist;
+    CaDist = rhs.CaDist;
+    CbDist = rhs.CbDist;
+}
+template<int src_t, int dst_t>  cv::RGB2Rot<src_t, dst_t>& cv::RGB2Rot<src_t, dst_t>::operator=(cv::RGB2Rot<src_t, dst_t> rhs)
+{
+    WOBOslackvalue = rhs.WOBOslackvalue;
+    dstIndx[0] = rhs.dstIndx[0]; dstIndx[1] = rhs.dstIndx[1]; dstIndx[2] = rhs.dstIndx[2];// indices for the destination 'RGB' channels
+    srcIndx[0] = rhs.srcIndx[0]; srcIndx[1] = rhs.srcIndx[1]; srcIndx[2] = rhs.srcIndx[2];// indices for the source RGB channels
+    L    = rhs.L;    // The rotated axis lengths
+    iL   = rhs.iL;   // The reciprocal of the rotated axis lengths
+    srcL = rhs.srcL; // The required axis lengths
+    
+    lambdaLCaCb = rhs.lambdaLCaCb; // The discard region in the LCaCb space
+    lambdaRGB = rhs.lambdaRGB;     // The discard region in the RGB space
+    alpha = rhs.alpha; beta = rhs.beta;  // The relative importance of the chromatic channels.
+    
+    rR = rhs.rR;
+    
+    rRScale = rhs.rRScale;
+    RMin = rhs.RMin; RMax = rhs.RMax; RRange = rhs.RRange;
+    
+    qRs    = rhs.qRs;
+    qRsMin = rhs.qRsMin; qRsMax = rhs.qRsMax; qRsRange = rhs.qRsRange;
+    
+    S = rhs.S;
+    
+    uWOBOLimits = rhs.uWOBOLimits;
+    qWOBOLimits = rhs.qWOBOLimits;
+    dColorLimits = rhs.dColorLimits;
+    
+//    uRMin = rhs.uRMin; uRMax = rhs.uRMax; uRRange = rhs.uRRange;
+    
+    distParam[0] = rhs.distParam[0]; distParam[1] = rhs.distParam[1]; distParam[2] = rhs.distParam[2];
+    LParam = rhs.LParam; CaParam = rhs.CaParam; CbParam = rhs.CbParam;
+    LDist = rhs.LDist;
+    CaDist = rhs.CaDist;
+    CbDist = rhs.CbDist;
+
+    return *this;
+}
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::setAxisLengths(double theta){
+    double vTheta = CV_PI/6. - std::fmod(theta - CV_PI/6., CV_PI/3.);
+    double pTheta = CV_PI/6. - std::fmod(theta,            CV_PI/3.);
+    L = Vec<double, 3>(std::sqrt(3.0 ), \
+                       (std::sqrt(1.5)) * std::sin(vTheta) + (std::sqrt(2.0)) * std::cos(vTheta), \
+                       (std::sqrt(1.5)) * std::sin(pTheta) + (std::sqrt(2.0)) * std::cos(pTheta));
+    iL = Vec<double, 3>(1.0/L(0), 1.0/L(1), 1.0/L(2));
+};
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::setDistParams(cv::Vec<double, 3> uSG, cv::Vec<double, 3> uC){
+     LParam.init();   LParam.set(uSG(0), uC(0));   LParam.setup();  srcL(0) = MIN( LParam.K *  LParam.uM, L(0));
+    CaParam.init();  CaParam.set(uSG(1), uC(1));  CaParam.setup();  srcL(1) = MIN(CaParam.K * CaParam.uM, L(1));
+    CbParam.init();  CbParam.set(uSG(2), uC(2));  CbParam.setup();  srcL(2) = MIN(CbParam.K * CbParam.uM, L(2));
+    // Find the working range
+    for(int i = 0; i < 3; i++){
+        RRange[i] = sWrkType(srcL(i) * (srcInfo::max - srcInfo::min));
+    }
+    RMin[0] = 0;                        RMax[0] = sWrkType(RRange[0]);
+    RMin[1] = sWrkType(-1*RRange[1]/2); RMax[1] = sWrkType(RRange[1]/2);
+    RMin[2] = sWrkType(-1*RRange[2]/2); RMax[2] = sWrkType(RRange[2]/2);
+    
+    // Set the distribution region boundary constants.
+     LParam.setRange(RMin[0],RMax[0],dstInfo::min,dstInfo::max);
+    CaParam.setRange(RMin[1],RMax[1],dstInfo::min,dstInfo::max);
+    CbParam.setRange(RMin[2],RMax[2],dstInfo::min,dstInfo::max);
+    
+};
+
+template<int src_t, int dst_t> void cv::RGB2Rot<src_t, dst_t>::setDistParams(
+                        distributeErfParameters<sWrkInfo::channelType, dstInfo::channelType> _LParam,
+                        distributeErfParameters<sWrkInfo::channelType, dstInfo::channelType> _CaParam,
+                        distributeErfParameters<sWrkInfo::channelType, dstInfo::channelType> _CbParam){
+    
+    LParam = _LParam; CaParam = _CaParam; CbParam = _CbParam;
+    srcL(0) = MIN( LParam.K *  LParam.uM, L(0));
+    srcL(1) = MIN(CaParam.K * CaParam.uM, L(1));
+    srcL(2) = MIN(CbParam.K * CbParam.uM, L(2));
+    // Find the working range
+    for(int i = 0; i < 3; i++){
+        RRange[i] = sWrkType(srcL(i) * (srcInfo::max - srcInfo::min));
+    }
+    RMin[0] = 0;                        RMax[0] = sWrkType(RRange[0]);
+    RMin[1] = sWrkType(-1*RRange[1]/2); RMax[1] = sWrkType(RRange[1]/2);
+    RMin[2] = sWrkType(-1*RRange[2]/2); RMax[2] = sWrkType(RRange[2]/2);
+    
+    // Set the distribution region boundary constants.
+    LParam.setRange(RMin[0],RMax[0],dstInfo::min,dstInfo::max);
+    CaParam.setRange(RMin[1],RMax[1],dstInfo::min,dstInfo::max);
+    CbParam.setRange(RMin[2],RMax[2],dstInfo::min,dstInfo::max);
+    
+};
+
+
+template<int src_t, int dst_t> inline typename cv::Vec<typename cv::Data_Type<dst_t>::type,3> cv::RGB2Rot<src_t, dst_t>::apply(typename cv::Vec<typename cv::Data_Type<src_t>::type,3> src)
+{
+    typename cv::Vec<typename cv::Data_Type<dst_t>::type,3> dst{0,0,0};
+    sWrkType X = src[srcIndx[0]]*qRs(0,0) + src[srcIndx[1]]*qRs(0,1) + src[srcIndx[2]]*qRs(0,2); // CV_DESCALE(x,n) = (((x) + (1 << ((n)-1))) >> (n))
+    sWrkType Y = src[srcIndx[0]]*qRs(1,0) + src[srcIndx[1]]*qRs(1,1) + src[srcIndx[2]]*qRs(1,2); // could be used in place of * scale
+    sWrkType Z = src[srcIndx[0]]*qRs(2,0) + src[srcIndx[1]]*qRs(2,1) + src[srcIndx[2]]*qRs(2,2); // Find shift which fits RRange into the desired bit depth.
+    
+    (* LDist)(X, dst[dstIndx[0]]);
+    (*CaDist)(Y, dst[dstIndx[1]]);
+    (*CbDist)(Z, dst[dstIndx[2]]);
+    return dst;
+}
+
+template<int src_t, int dst_t> inline typename cv::Vec<typename cv::Data_Type<dst_t>::type,4> cv::RGB2Rot<src_t, dst_t>::apply(typename cv::Vec<typename cv::Data_Type<src_t>::type,4> src)
+{
+    typename cv::Vec<typename cv::Data_Type<dst_t>::type,4> dst{0,0,0,0};
+    sWrkType X = src[srcIndx[0]]*qRs(0,0) + src[srcIndx[1]]*qRs(0,1) + src[srcIndx[2]]*qRs(0,2); // CV_DESCALE(x,n) = (((x) + (1 << ((n)-1))) >> (n))
+    sWrkType Y = src[srcIndx[0]]*qRs(1,0) + src[srcIndx[1]]*qRs(1,1) + src[srcIndx[2]]*qRs(1,2); // could be used in place of * scale
+    sWrkType Z = src[srcIndx[0]]*qRs(2,0) + src[srcIndx[1]]*qRs(2,1) + src[srcIndx[2]]*qRs(2,2); // Find shift which fits RRange into the desired bit depth.
+    
+    (* LDist)(X, dst[dstIndx[0]]);
+    (*CaDist)(Y, dst[dstIndx[1]]);
+    (*CbDist)(Z, dst[dstIndx[2]]);
+    
+    if(dstInfo::channels > 3){
+        dst[3] = dstType(classifier( qWOBO(X,Y,Z), color(dst[dstIndx[1]],dst[dstIndx[2]])));
+    }
+    return dst;
+}
+
+
+template<int src_t, int dst_t> inline void cv::RGB2Rot<src_t, dst_t>::operator()(const typename cv::Data_Type<src_t>::type* src, typename cv::Data_Type<dst_t>::type* dst, int n) const
+{
+    n *= dstInfo::channels;
+    for(int i = 0; i < n; i += dstInfo::channels, src += srcInfo::channels)
+    {
+//        fprintf(stdout,"Thread %d : RGB2Rot : src{%3hhu, %3hhu, %3hhu} : In  1 : %d\n",getThreadNum(),src[srcIndx[0]],src[srcIndx[1]],src[srcIndx[2]], i);
+        
+        sWrkType X = src[srcIndx[0]]*qRs(0,0) + src[srcIndx[1]]*qRs(0,1) + src[srcIndx[2]]*qRs(0,2); // CV_DESCALE(x,n) = (((x) + (1 << ((n)-1))) >> (n))
+        sWrkType Y = src[srcIndx[0]]*qRs(1,0) + src[srcIndx[1]]*qRs(1,1) + src[srcIndx[2]]*qRs(1,2); // could be used in place of * scale
+        sWrkType Z = src[srcIndx[0]]*qRs(2,0) + src[srcIndx[1]]*qRs(2,1) + src[srcIndx[2]]*qRs(2,2); // Find shift which fits RRange into the desired bit depth.
+        
+//        fprintf(stdout,"Thread %d : RGB2Rot : src{%3hhu, %3hhu, %3hhu} : Out 2 : %d\n",getThreadNum(),src[srcIndx[0]],src[srcIndx[1]],src[srcIndx[2]],i);
+//        fprintf(stdout,"Thread %d : RGB2Rot : src{%3hhu, %3hhu, %3hhu} : Out 3 : %d : XYZ{%6d, %6d, %6d}\n",getThreadNum(),src[srcIndx[0]],src[srcIndx[1]],src[srcIndx[2]],i,X,Y,Z);
+        
+        (* LDist)(X, dst[i+dstIndx[0]]);
+        (*CaDist)(Y, dst[i+dstIndx[1]]);
+        (*CbDist)(Z, dst[i+dstIndx[2]]);
+        
+        if(dstInfo::channels > 3){
+//            fprintf(stdout,"Thread %d : RGB2Rot : src{%3hhu, %3hhu, %3hhu} : XYZ{%6d, %6d, %6d}\n",getThreadNum(),src[srcIndx[0]],src[srcIndx[1]],src[srcIndx[2]],X,Y,Z);
+//            fprintf(stdout,"Thread %d : classifier( qWOBO(%6d, %6d, %6d), color(%3hhu, %3hhu))\n",getThreadNum(), X, Y, Z, dst[i+dstIndx[1]], dst[i+dstIndx[2]]);
+//            fprintf(stdout,"Thread %d : classifier( %d, color(%d)) = %d\n",getThreadNum(), qWOBO(X,Y,Z), color(dst[i+dstIndx[1]],dst[i+dstIndx[2]]), classifier( qWOBO(X,Y,Z), color(dst[i+dstIndx[1]],dst[i+dstIndx[2]])));
+           dst[i+3] = dstType(classifier( qWOBO(X,Y,Z), color(dst[i+dstIndx[1]],dst[i+dstIndx[2]])));
+        }
+        int s0 = src[srcIndx[0]];
+        int s1 = src[srcIndx[1]];
+        int s2 = src[srcIndx[2]];
+        int d0 = dst[i+dstIndx[0]];
+        int d1 = dst[i+dstIndx[1]];
+        int d2 = dst[i+dstIndx[2]];
+        int d3 = dst[i+3];
+//        fprintf(stdout,"Thread %d : RGB2Rot : src{%3d, %3d, %3d} : Out 4 : %d : dst{%3d, %3d, %3d, %3d}\n",getThreadNum(),s0,s1,s2,i,d0,d1, d2,d3);
+//        fprintf(stdout,"Thread %d : RGB2Rot : src{%3hhu, %3hhu, %3hhu} : Out 4 : %d : dst{%3hhu, %3hhu, %3hhu, %3hhu}\n",getThreadNum(),src[srcIndx[0]],src[srcIndx[1]],src[srcIndx[2]],i,dst[i+dstIndx[0]],dst[i+dstIndx[1]], dst[i+dstIndx[2]],dst[i+3]);
+    }
+    
+}
+
+template class cv::RGB2Rot<CV_8UC3,CV_8UC3>;
+template class cv::RGB2Rot<CV_8UC4,CV_8UC3>;
+template class cv::RGB2Rot<CV_8UC3,CV_8UC4>;
+template class cv::RGB2Rot<CV_8UC4,CV_8UC4>;
+
+// RGB2Rot helper functions.
+
+typename cv::Vec<int, 3> cv::dqAS( double theta){
+    switch (int(std::floor(3* (std::fmod(theta, CV_PI))/CV_PI)))
+    {
+        case 0:
+            return *new cv::Vec<int, 3>(1,1,0);
+            break;
+        case 1:
+            return *new cv::Vec<int, 3>(1,0,1);
+            break;
+        case 2:
+            return *new cv::Vec<int, 3>(0,1,1);
+            break;
+        default:
+            return *new cv::Vec<int, 3>(1,1,0);
+    };
+    
+}
+
+// Algorithm 2: A function which returns the angular position of a compromise between the perturbations to the channels.
+// oPhiA and oPhiB gives the position of the extreme perturbations.
+// chanPerturbation returns the angle and the perturbation at that angle.
+
+double cv::oPhiA(int l, int n){
+    return std::atan(l * std::sqrt(3.0) / ((1<<n) - 1));
+}
+
+double cv::oPhiB(int l, int n){
+    return std::atan(l / ( (1<<(n-2)) * std::sqrt(3.0) ));
+}
+
+cv::Vec<double,2> cv::chanPerturbation(int i, double alpha, double beta, int n){
+    CV_Assert((alpha < -1e-10|| alpha > 1e-10) && (beta < -1e-10|| beta > 1e-10));
+    cv::Vec<double,2> out;
+    double bI = double((1<<(n-3))); // bI = 2^(n-3)
+    int iota = std::floor(7*bI - std::sqrt(i*i - 2*i*bI + 49*bI*bI));
+    double nPhiA, uPhiA, nPhiB, uPhiB, denom;
+    if ( (i+iota) % 2 == 0){
+        nPhiA = oPhiA(i+iota+1,n); uPhiA = oPhiA(i+iota,n);
+        nPhiB = oPhiB(i-iota-1,n); uPhiB = oPhiB(i-iota,n);
+    } else {
+        nPhiA = oPhiA(i+iota,n); uPhiA = oPhiA(i+iota+1,n);
+        nPhiB = oPhiB(i-iota,n); uPhiB = oPhiB(i-iota-1,n);
+    }
+    denom = (beta * (uPhiA - nPhiA) + alpha * (nPhiB - uPhiB));
+    CV_Assert((denom < -1e-10 || denom > 1e-10));
+    out(0) = (beta * uPhiB * (uPhiA - nPhiA) + alpha * uPhiA * (nPhiB - uPhiB) )/denom;
+    out(1) = (beta * alpha * (uPhiA - uPhiB) )/denom;
+    return out;
+}
+
+
+//! converts image from one color space to another
+template class cv::colorSpaceConverter<CV_8UC3,CV_8UC3>;
+template class cv::colorSpaceConverter<CV_8UC4,CV_8UC3>;
+template class cv::colorSpaceConverter<CV_8UC3,CV_8UC4>;
+template class cv::colorSpaceConverter<CV_8UC4,CV_8UC4>;
+
+template<int src_t, int dst_t> void cv::convertColor(cv::InputArray _src, cv::OutputArray _dst, cv::colorSpaceConverter<src_t, dst_t>& colorConverter)
+{
+//    fprintf(stdout,"%s\n","In : cv::convertColor");
+    cv::Mat src = _src.getMat(), dst;
+    cv::Size sz = src.size();
+    int scn = src.channels(), depth = src.depth();
+    int dcn = cv::Data_Type<dst_t>::channels;
+    // CV_Assert( colorConverter.srcInfo::channels == src.channels() );
+    
+    if (dcn <= 0) dcn = 3;
+    
+    _dst.create(sz, CV_MAKETYPE(depth, dcn));
+    dst = _dst.getMat();
+    if( depth == CV_8U )
+    {
+        CvtColorLoop(src.data, src.step, dst.data, dst.step, src.cols, src.rows, colorConverter);
+    } else {
+        CV_Error( CV_StsBadArg, "Unsupported image depth" );
+    }
+//    fprintf(stdout,"%s\n","Out : cv::convertColor");
+    
+}
+
+template void cv::convertColor<CV_8UC3,CV_8UC3>(cv::InputArray _src, cv::OutputArray _dst, cv::colorSpaceConverter<CV_8UC3, CV_8UC3>& colorConverter);
+template void cv::convertColor<CV_8UC4,CV_8UC3>(cv::InputArray _src, cv::OutputArray _dst, cv::colorSpaceConverter<CV_8UC4, CV_8UC3>& colorConverter);
+template void cv::convertColor<CV_8UC3,CV_8UC4>(cv::InputArray _src, cv::OutputArray _dst, cv::colorSpaceConverter<CV_8UC3, CV_8UC4>& colorConverter);
+template void cv::convertColor<CV_8UC4,CV_8UC4>(cv::InputArray _src, cv::OutputArray _dst, cv::colorSpaceConverter<CV_8UC4, CV_8UC4>& colorConverter);
+
+
+int stepsToEdge(int rows, int cols, const cv::Point start, const cv::Point vec){
+    // Find the number of steps to the edge.
+    int steps0 = rows + cols;
+    int steps1 = rows + cols;
+    if(vec.x<0){steps0 = floor(start.x/(-1*vec.x));};
+    if(vec.x>0){steps0 = floor((rows-start.x)/vec.x);};
+    if(vec.y<0){steps1 = floor(start.y/(-1*vec.y));};
+    if(vec.y>0){steps1 = floor((cols-start.y)/vec.y);};
+    if(steps0 < steps1)
+    {
+        return steps0;
+    } else {
+        return steps1;
+    }
+}
+
+template<int src_t> cv::Point cv::runReach(cv::InputArray _src, Point start, Point vec)
+{
+    using srcInfo = cv_Data_Type<src_t>;
+    using srcType = typename cv_Data_Type<src_t>::type;
+    int low=1, high=2;
+    Point end;
+    Point reach = start;
+    int steps;
+    cv::Mat src = _src.getMat();
+    const int channels = src.channels();
+    end = start;
+    steps = stepsToEdge(src.rows, src.cols, start, vec);
+    
+    if (channels==1) {
+        for (int i=1; i<=steps; i++) {
+            int pxl = src.at<srcType>(reach.x,reach.y);
+            if (pxl >= high) {
+                end = reach;
+            } else {
+                //  if( low <= pxl < high) { continue without updating end. }
+                if( pxl < low)  { break;}
+            }
+            reach += vec;
+            
+        }
+    } else {
+        Mat_<Vec<srcType, CV_MAT_CN(src_t)>> _src = src;
+        for (int i=1; i<=steps; i++) {
+            int pxl = _src(reach.x,reach.y)[channels-1];
+            if (pxl >= high) {
+                end = reach;
+            } else {
+                //  if( low <= pxl < high) { continue without updating end. }
+                if( pxl < low)  { break;}
+            }
+            reach += vec;
+            
+        }
+    }
+    return end;
+}
+
+template cv::Point cv::runReach<CV_8UC1>(cv::InputArray _src, Point start, Point vec);
+template cv::Point cv::runReach<CV_8UC2>(cv::InputArray _src, Point start, Point vec);
+template cv::Point cv::runReach<CV_8UC3>(cv::InputArray _src, Point start, Point vec);
+template cv::Point cv::runReach<CV_8UC4>(cv::InputArray _src, Point start, Point vec);
+
+
+
+template<int src_t> cv::Point cv::runReachInv(cv::InputArray _src, Point start, Point vec)
+{
+    using srcInfo = cv_Data_Type<src_t>;
+    using srcType = typename cv_Data_Type<src_t>::type;
+    int low=1, high=2;
+    Point end;
+    Point reach = start;
+    int steps;
+    cv::Mat src = _src.getMat();
+    const int channels = src.channels();
+    end = start;
+    // Find the number of steps to the edge.
+    steps = stepsToEdge(src.rows, src.cols, start, vec);
+    
+    if (channels==1) {
+        for (int i=1; i<=steps; i++) {
+            int pxl = src.at<srcType>(reach.x,reach.y);
+            if (pxl <= low) {
+                end = reach;
+            } else {
+                //  if( low < pxl < high) { continue without updating end. }
+                if( pxl >= high)  { break;}
+            }
+            reach += vec;
+            
+        }
+    } else {
+        Mat_<Vec<srcType, CV_MAT_CN(src_t)>> _src = src;
+        for (int i=1; i<=steps; i++) {
+            int pxl = _src(reach.x,reach.y)[channels-1];
+            if (pxl <= low) {
+                end = reach;
+            } else {
+                //  if( low < pxl < high) { continue without updating end. }
+                if( pxl >= high)  { break;}
+            }
+            reach += vec;
+            
+        }
+    }
+    return end;
+}
+
+template cv::Point cv::runReachInv<CV_8UC1>(cv::InputArray _src, Point start, Point vec);
+template cv::Point cv::runReachInv<CV_8UC2>(cv::InputArray _src, Point start, Point vec);
+template cv::Point cv::runReachInv<CV_8UC3>(cv::InputArray _src, Point start, Point vec);
+template cv::Point cv::runReachInv<CV_8UC4>(cv::InputArray _src, Point start, Point vec);
+
+template<int src_t> int cv::runReachLongest(cv::InputArray _src, Point* start, Point* end, const Point vec)
+{
+    CV_FUNCNAME( "runReachLongest" );
+    using srcInfo = cv_Data_Type<src_t>;
+    using srcType = typename cv_Data_Type<src_t>::type;
+    cv::Mat src = _src.getMat();
+    
+    int low=1, high=2;
+    Point longStart, longEnd;
+    int length = 0, pxl = 0, channels = src.channels();
+    bool onTarget = false;
+    
+    __CV_BEGIN__;
+    
+    CV_ASSERT(src.type()==src_t);
+    
+    if (channels==1) {
+        pxl = src.at<srcType>(start->x,start->y);
+    } else {
+        Mat_<Vec<srcType, CV_MAT_CN(src_t)>> __src = src;
+        int x = start->x;
+        int y = start->y;
+        pxl = __src(start->x,start->y)[channels-1];
+    }
+    onTarget = pxl >= high;
+    
+    while (start->x <= src.rows-1 && start->y <= src.cols-1) {
+        if (onTarget) {
+            *end = cv::runReach<CV_8UC4>(src, *start, vec);
+            float len = std::sqrt((end->x - start->x)*(end->x - start->x)+(end->y - start->y)*(end->y - start->y));
+            if (len > length) {
+                longStart = *start; longEnd = *end;
+                length = std::round(len);
+            }
+        } else {
+            *end = cv::runReachInv<CV_8UC4>(src, *start, vec);
+        }
+        *start = *end+vec;
+        onTarget=!onTarget;
+    }
+    
+
+    *start = longStart; *end = longEnd;
+    
+    __CV_END__;
+    
+    return length;
+    
+}
+
+template int cv::runReachLongest<CV_8UC1>(cv::InputArray _src, Point* start, Point* end, const Point vec);
+template int cv::runReachLongest<CV_8UC2>(cv::InputArray _src, Point* start, Point* end, const Point vec);
+template int cv::runReachLongest<CV_8UC3>(cv::InputArray _src, Point* start, Point* end, const Point vec);
+template int cv::runReachLongest<CV_8UC4>(cv::InputArray _src, Point* start, Point* end, const Point vec);
+
+
+template<int src_t> void cv::fillamentFill(cv::InputArray _src, OutputArray _edgePnts, OutputArray _midPnts, Point start, Point end)
+{
+    // Assuming the points are given as row column. This is not the openCV standard which is {column,row} ie (x,y) with an inverted y.
+    // This should be fixed for submission but runReach and such will also have to be fixed.
+    // Maybe move to a int row, int col style for this order and wrap this in an overloaded openCV style Point method.
+    // Should the output also be openCV Point style?
+    
+    using srcType = typename cv_Data_Type<src_t>::type;
+    
+    cv::Mat src = _src.getMat();
+    
+    LineIterator iterator(src, Point(start.y,start.x), Point(end.y,end.x), 8, false);
+//    fprintf(stdout, "start = { %d, %d } = { %d, %d };\n",start.x,start.y,iterator.pos().y,iterator.pos().x);
+//    fprintf(stdout, "end = { %d, %d };\n",end.x,end.y);
+//    fprintf(stdout, "count = %d;\n",iterator.count);
+    
+    int count = iterator.count;
+    // Allocate output Arrays.
+    _edgePnts.create(2*count, 2, CV_32S);
+    Mat edgePnts = _edgePnts.getMat();
+    _midPnts.create(  count, 2, CV_32S);
+    Mat midPnts = _midPnts.getMat();
+    
+    Mat pnts(2*count, 2, CV_32S);
+    Point  vec1, vec2;
+    Point_<double> pathVec = (end - start);
+    Point_<double> uPathVec = pathVec/sqrt(pathVec.x*pathVec.x+pathVec.y*pathVec.y);
+    Point_<int> para; para.x = round(uPathVec.x); para.y = round(uPathVec.y);
+    vec1.x =      para.y; vec1.y = -1 * para.x; // Rotate by -Pi/2
+    vec2.x = -1 * para.y; vec2.y =      para.x; // Rotate by  Pi/2
+////    fprintf(stdout,"%s", "aStart={};\n");
+//    if(para.x == 0 && para.y == 1){ // Right
+//        for( int i = 0; i < count; i++, ++iterator )
+//        {
+//            Point aStart = Point(iterator.pos().y,iterator.pos().x);
+// //           fprintf(stdout, "AppendTo[aStart, { %d, %d }];\n",aStart.x,aStart.y);
+//            Point top = runReach<CV_8UC4>(_src, aStart, vec1);
+//            Point bot = runReach<CV_8UC4>(_src, aStart, vec2);
+//            edgePnts.at<CV_32S_TYPE>(i,0) = top.x; edgePnts.at<CV_32S_TYPE>(i,1) = top.y;
+//            edgePnts.at<CV_32S_TYPE>(2*count-i-1,0) = bot.x; edgePnts.at<CV_32S_TYPE>(2*count-i-1,1) = bot.y;
+//            midPnts.at<CV_32S_TYPE>(i,0) = (top.x+bot.x)/2;
+//            midPnts.at<CV_32S_TYPE>(i,1) = (top.y+bot.y)/2;
+//        }
+//
+//        
+//    } else if(para.x ==  0 && para.y == -1){ // Left
+//        for( int i = 0; i < count; i++, ++iterator )
+//        {
+//            Point aStart = Point(iterator.pos().y,iterator.pos().x);
+// //           fprintf(stdout, "AppendTo[aStart, { %d, %d }];\n",aStart.x,aStart.y);
+//            Point top = runReach<CV_8UC4>(_src, aStart, vec1);
+//            Point bot = runReach<CV_8UC4>(_src, aStart, vec2);
+//            edgePnts.at<CV_32S_TYPE>(i,0) = top.x; edgePnts.at<CV_32S_TYPE>(i,1) = top.y;
+//            edgePnts.at<CV_32S_TYPE>(2*count-i-1,0) = bot.x; edgePnts.at<CV_32S_TYPE>(2*count-i-1,1) = bot.y;
+//            midPnts.at<CV_32S_TYPE>(i,0) = (top.x+bot.x)/2;
+//            midPnts.at<CV_32S_TYPE>(i,1) = (top.y+bot.y)/2;
+//        }
+//
+//    } else if(para.x ==  1 && para.y ==  0){ // Down
+//        for( int i = 0; i < count; i++, ++iterator )
+//        {
+//            Point aStart = Point(iterator.pos().y,iterator.pos().x);
+////            fprintf(stdout, "AppendTo[aStart, { %d, %d }];\n",aStart.x,aStart.y);
+//            Point top = runReach<CV_8UC4>(_src, aStart, vec1);
+//            Point bot = runReach<CV_8UC4>(_src, aStart, vec2);
+//            edgePnts.at<CV_32S_TYPE>(i,0) = top.x; edgePnts.at<CV_32S_TYPE>(i,1) = top.y;
+//            edgePnts.at<CV_32S_TYPE>(2*count-i-1,0) = bot.x; edgePnts.at<CV_32S_TYPE>(2*count-i-1,1) = bot.y;
+//            midPnts.at<CV_32S_TYPE>(i,0) = (top.x+bot.x)/2;
+//            midPnts.at<CV_32S_TYPE>(i,1) = (top.y+bot.y)/2;
+//        }
+//
+//    } else if(para.x == -1 && para.y ==  0){ // Up
+//        for( int i = 0; i < count; i++, ++iterator )
+//        {
+//            Point aStart = Point(iterator.pos().y,iterator.pos().x);
+////            fprintf(stdout, "AppendTo[aStart, { %d, %d }];\n",aStart.x,aStart.y);
+//            Point top = runReach<CV_8UC4>(_src, aStart, vec1);
+//            Point bot = runReach<CV_8UC4>(_src, aStart, vec2);
+//            edgePnts.at<CV_32S_TYPE>(count-i-1,0) = top.x; edgePnts.at<CV_32S_TYPE>(count-i-1,1) = top.y;
+//            edgePnts.at<CV_32S_TYPE>(count+i,0) = bot.x; edgePnts.at<CV_32S_TYPE>(count+i,1) = bot.y;
+//            midPnts.at<CV_32S_TYPE>(i,0) = (top.x+bot.x)/2;
+//            midPnts.at<CV_32S_TYPE>(i,1) = (top.y+bot.y)/2;
+//        }
+//
+//    } else {
+//        // Error.
+//    }
+    
+    for( int i = 0; i < count; i++, ++iterator )
+    {
+        Point aStart = Point(iterator.pos().y,iterator.pos().x);
+        //           fprintf(stdout, "AppendTo[aStart, { %d, %d }];\n",aStart.x,aStart.y);
+        Point top = runReach<src_t>(_src, aStart, vec1);
+        Point bot = runReach<src_t>(_src, aStart, vec2);
+        edgePnts.at<CV_32S_TYPE>(i,0) = top.x; edgePnts.at<CV_32S_TYPE>(i,1) = top.y;
+        edgePnts.at<CV_32S_TYPE>(2*count-i-1,0) = bot.x; edgePnts.at<CV_32S_TYPE>(2*count-i-1,1) = bot.y;
+        midPnts.at<CV_32S_TYPE>(i,0) = (top.x+bot.x)/2;
+        midPnts.at<CV_32S_TYPE>(i,1) = (top.y+bot.y)/2;
+    }
+
+    }
+
+template void cv::fillamentFill<CV_8UC1>(cv::InputArray _src, OutputArray _edgePnts, OutputArray _midPnts, Point start, Point end);
+template void cv::fillamentFill<CV_8UC2>(cv::InputArray _src, OutputArray _edgePnts, OutputArray _midPnts, Point start, Point end);
+template void cv::fillamentFill<CV_8UC3>(cv::InputArray _src, OutputArray _edgePnts, OutputArray _midPnts, Point start, Point end);
+template void cv::fillamentFill<CV_8UC4>(cv::InputArray _src, OutputArray _edgePnts, OutputArray _midPnts, Point start, Point end);
+
+template<int src_t> cv::Point cv::runReachToEnd(cv::InputArray _src, Point start, Point vec)
+{
+    using srcType = typename cv_Data_Type<src_t>::type;
+    cv::Mat src = _src.getMat();
+    double len = 100.0, tol = 2.0;
+    Point  vec1(     vec.y, -1 * vec.x); // Rotate by -Pi/2
+    Point  vec2(-1 * vec.y,      vec.x); // Rotate by  Pi/2
+//    vec1.x =      vec.y; vec1.y = -1 * vec.x; // Rotate by -Pi/2
+//    vec2.x = -1 * vec.y; vec2.y =      vec.x; // Rotate by  Pi/2
+    Point mid = start;
+    while (len > tol) {
+        Point run = runReach<CV_8UC4>(_src, mid, vec);
+        Point dif = run-mid;
+        len = sqrt(dif.x * dif.x + dif.y * dif.y);
+        Point top = runReach<CV_8UC4>(_src, run, vec1);
+        Point bot = runReach<CV_8UC4>(_src, run, vec2);
+        mid = (top+bot)/2;
+    }
+    return mid;
+    
+}
+
+template cv::Point cv::runReachToEnd<CV_8UC1>(cv::InputArray _src,  Point start, Point end);
+template cv::Point cv::runReachToEnd<CV_8UC2>(cv::InputArray _src,  Point start, Point end);
+template cv::Point cv::runReachToEnd<CV_8UC3>(cv::InputArray _src,  Point start, Point end);
+template cv::Point cv::runReachToEnd<CV_8UC4>(cv::InputArray _src,  Point start, Point end);
+
+
+template<int src_t> std::vector<cv::Point> cv::runReachMidline(cv::InputArray _src, Point start, Point vec)
+{
+    cv::Mat src = _src.getMat();
+    double len = 100.0, tol = 2.0;
+    std::vector<Point> midPnts;
+//    Mat midPnts(100,2,CV_32SC1); // max of 100 mid line pnts
+    Point  vec1(     vec.y, -1 * vec.x); // Rotate by -Pi/2
+    Point  vec2(-1 * vec.y,      vec.x); // Rotate by  Pi/2
+    Point mid = start;
+    int i=0;
+    midPnts.push_back(start);
+    while (len > tol) {
+        Point run = runReach<CV_8UC4>(_src, mid, vec);
+        Point dif = run-mid;
+        len = sqrt(dif.x * dif.x + dif.y * dif.y);
+        Point top = runReach<CV_8UC4>(_src, run, vec1);
+        Point bot = runReach<CV_8UC4>(_src, run, vec2);
+        mid = (top+bot)/2;
+        midPnts.push_back(mid);
+   //     midPnts.at<CV_32S_TYPE>(i,0) = mid.x; midPnts.at<CV_32S_TYPE>(i,1) = mid.y;
+        i++;
+    }
+  //  Mat outPnts(midPnts,Range(0,i-1),Range(0,1));
+    return midPnts;
+}
+
+template std::vector<cv::Point> cv::runReachMidline<CV_8UC1>(cv::InputArray _src,  Point start, Point vec);
+template std::vector<cv::Point> cv::runReachMidline<CV_8UC2>(cv::InputArray _src,  Point start, Point vec);
+template std::vector<cv::Point> cv::runReachMidline<CV_8UC3>(cv::InputArray _src,  Point start, Point vec);
+template std::vector<cv::Point> cv::runReachMidline<CV_8UC4>(cv::InputArray _src,  Point start, Point vec);
+
+
+template<int src_t> cv::Mat cv::runReachMidlineMat(cv::InputArray _src, Point start, Point vec)
+{
+    std::vector<Point> midPnts = runReachMidline<src_t>( _src, start, vec);
+    int n = midPnts.size();
+    Mat outPnts(2, n, CV_32SC1);
+    for (int i =0; i<n; i++) {
+        outPnts.at<CV_32S_TYPE>(0,i) = midPnts[i].x;
+        outPnts.at<CV_32S_TYPE>(1,i) = midPnts[i].y;
+    }
+    return outPnts;
+}
+
+template cv::Mat cv::runReachMidlineMat<CV_8UC1>(cv::InputArray _src,  Point start, Point vec);
+template cv::Mat cv::runReachMidlineMat<CV_8UC2>(cv::InputArray _src,  Point start, Point vec);
+template cv::Mat cv::runReachMidlineMat<CV_8UC3>(cv::InputArray _src,  Point start, Point vec);
+template cv::Mat cv::runReachMidlineMat<CV_8UC4>(cv::InputArray _src,  Point start, Point vec);
 
 CV_IMPL void
 cvCvtColor( const CvArr* srcarr, CvArr* dstarr, int code )

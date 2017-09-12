@@ -38,6 +38,7 @@ the use of this software, even if advised of the possibility of such damage.
 #define __OPENCV_IMGPROC_FILTERENGINE_HPP__
 
 #include "opencv2/imgproc.hpp"
+#include "opencv2/core/cvtraits.hpp"
 
 namespace cv
 {
@@ -51,6 +52,10 @@ enum
     KERNEL_SMOOTH       = 4, // all the kernel elements are non-negative and summed to 1
     KERNEL_INTEGER      = 8  // all the kernel coefficients are integer numbers
 };
+    
+template <typename Cvt> CV_EXPORTS_W void CvtColorLoop(const Mat& src, Mat& dst, const Cvt& cvt);
+    
+    
 
 /*!
  The Base Class for 1D or Row-wise Filters

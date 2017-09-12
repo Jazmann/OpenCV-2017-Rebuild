@@ -975,6 +975,11 @@ bool CvCapture_FFMPEG::grabFrame()
 
             frame_number++;
             valid = true;
+
+#if USE_AV_INTERRUPT_CALLBACK
+            // update interrupt value
+            get_monotonic_time(&interrupt_metadata.value);
+#endif
         }
         else
         {
@@ -2718,6 +2723,11 @@ bool InputMediaStream_FFMPEG::read(unsigned char** data, int* size, int* endOfFi
 
         if (ret == AVERROR(EAGAIN))
             continue;
+
+#if USE_AV_INTERRUPT_CALLBACK
+        // update interrupt value
+        get_monotonic_time(&interrupt_metadata.value);
+#endif
 
         if (ret < 0)
         {

@@ -1610,6 +1610,67 @@ void cv::gemm( InputArray matA, InputArray matB, double alpha,
 namespace cv
 {
 
+template<typename ST, typename DT, typename WT> static void
+transform_( const ST* src, DT* dst, const WT* m, int len, int scn, int dcn )
+{
+    int x;
+    
+    if( scn == 2 && dcn == 2 )
+    {
+        for( x = 0; x < len*2; x += 2 )
+        {
+            ST v0 = src[x], v1 = src[x+1];
+            DT t0 = saturate_cast<DT>(m[0]*v0 + m[1]*v1 + m[2]);
+            DT t1 = saturate_cast<DT>(m[3]*v0 + m[4]*v1 + m[5]);
+            dst[x] = t0; dst[x+1] = t1;
+        }
+    }
+    else if( scn == 3 && dcn == 3 )
+    {
+        for( x = 0; x < len*3; x += 3 )
+        {
+            ST v0 = src[x], v1 = src[x+1], v2 = src[x+2];
+            DT t0 = saturate_cast<DT>(m[0]*v0 + m[1]*v1 + m[2]*v2 + m[3]);
+            DT t1 = saturate_cast<DT>(m[4]*v0 + m[5]*v1 + m[6]*v2 + m[7]);
+            DT t2 = saturate_cast<DT>(m[8]*v0 + m[9]*v1 + m[10]*v2 + m[11]);
+            dst[x] = t0; dst[x+1] = t1; dst[x+2] = t2;
+        }
+    }
+    else if( scn == 3 && dcn == 1 )
+    {
+        for( x = 0; x < len; x++, src += 3 )
+            dst[x] = saturate_cast<DT>(m[0]*src[0] + m[1]*src[1] + m[2]*src[2] + m[3]);
+    }
+    else if( scn == 4 && dcn == 4 )
+    {
+        for( x = 0; x < len*4; x += 4 )
+        {
+            ST v0 = src[x], v1 = src[x+1], v2 = src[x+2], v3 = src[x+3];
+            DT t0 = saturate_cast<DT>(m[0]*v0 + m[1]*v1 + m[2]*v2 + m[3]*v3 + m[4]);
+            DT t1 = saturate_cast<DT>(m[5]*v0 + m[6]*v1 + m[7]*v2 + m[8]*v3 + m[9]);
+            dst[x] = t0; dst[x+1] = t1;
+            t0 = saturate_cast<DT>(m[10]*v0 + m[11]*v1 + m[12]*v2 + m[13]*v3 + m[14]);
+            t1 = saturate_cast<DT>(m[15]*v0 + m[16]*v1 + m[17]*v2 + m[18]*v3 + m[19]);
+            dst[x+2] = t0; dst[x+3] = t1;
+        }
+    }
+    else
+    {
+        for( x = 0; x < len; x++, src += scn, dst += dcn )
+        {
+            const WT* _m = m;
+            int j, k;
+            for( j = 0; j < dcn; j++, _m += scn + 1 )
+            {
+                WT s = _m[scn];
+                for( k = 0; k < scn; k++ )
+                    s += _m[k]*src[k];
+                dst[j] = saturate_cast<DT>(s);
+            }
+        }
+    }
+}
+    
 template<typename T, typename WT> static void
 transform_( const T* src, T* dst, const WT* m, int len, int scn, int dcn )
 {
@@ -2059,11 +2120,15 @@ typedef void (*TransformFunc)( const uchar* src, uchar* dst, const uchar* m, int
 static TransformFunc getTransformFunc(int depth)
 {
     static TransformFunc transformTab[] =
-    {
-        (TransformFunc)transform_8u, (TransformFunc)transform_8s, (TransformFunc)transform_16u,
-        (TransformFunc)transform_16s, (TransformFunc)transform_32s, (TransformFunc)transform_32f,
-        (TransformFunc)transform_64f, 0
-    };
+    TYPE_TAB_ORDER( \
+        (TransformFunc)transform_8u,  (TransformFunc)transform_8s, \
+        (TransformFunc)transform_16u, (TransformFunc)transform_16s, \
+        (TransformFunc)transform_32u, (TransformFunc)transform_32s, \
+        (TransformFunc)transform_64u, (TransformFunc)transform_64s, \
+        (TransformFunc)transform_32f, (TransformFunc)transform_64f, \
+        0, 0, 0, 0, 0, 0 \
+        );
+
 
     return transformTab[depth];
 }
@@ -2071,11 +2136,15 @@ static TransformFunc getTransformFunc(int depth)
 static TransformFunc getDiagTransformFunc(int depth)
 {
     static TransformFunc diagTransformTab[] =
-    {
-        (TransformFunc)diagtransform_8u, (TransformFunc)diagtransform_8s, (TransformFunc)diagtransform_16u,
-        (TransformFunc)diagtransform_16s, (TransformFunc)diagtransform_32s, (TransformFunc)diagtransform_32f,
-        (TransformFunc)diagtransform_64f, 0
-    };
+    TYPE_TAB_ORDER( \
+        (TransformFunc) diagtransform_8u,  (TransformFunc) diagtransform_8s, \
+        (TransformFunc) diagtransform_16u, (TransformFunc) diagtransform_16s, \
+        (TransformFunc) diagtransform_32u, (TransformFunc) diagtransform_32s, \
+        (TransformFunc) diagtransform_64u, (TransformFunc) diagtransform_64s, \
+        (TransformFunc) diagtransform_32f, (TransformFunc) diagtransform_64f, \
+        0, 0, 0, 0, 0, 0 \
+        );
+
 
     return diagTransformTab[depth];
 }
@@ -3382,12 +3451,14 @@ typedef double (*DotProdFunc)(const uchar* src1, const uchar* src2, int len);
 static DotProdFunc getDotProdFunc(int depth)
 {
     static DotProdFunc dotProdTab[] =
-    {
-        (DotProdFunc)GET_OPTIMIZED(dotProd_8u), (DotProdFunc)GET_OPTIMIZED(dotProd_8s),
-        (DotProdFunc)dotProd_16u, (DotProdFunc)dotProd_16s,
-        (DotProdFunc)dotProd_32s, (DotProdFunc)GET_OPTIMIZED(dotProd_32f),
-        (DotProdFunc)dotProd_64f, 0
-    };
+    TYPE_TAB_ORDER( \
+        (DotProdFunc)GET_OPTIMIZED(dotProd_8u),  (DotProdFunc)GET_OPTIMIZED(dotProd_8s), \
+        (DotProdFunc)dotProd_16u,                (DotProdFunc)dotProd_16s, \
+        (DotProdFunc)dotProd_32u,                (DotProdFunc)dotProd_32s, \
+        (DotProdFunc)dotProd_64u,                (DotProdFunc)dotProd_64s, \
+        (DotProdFunc)GET_OPTIMIZED(dotProd_32f), (DotProdFunc)dotProd_64f, \
+        0, 0, 0, 0, 0, 0 \
+        );
 
     return dotProdTab[depth];
 }
