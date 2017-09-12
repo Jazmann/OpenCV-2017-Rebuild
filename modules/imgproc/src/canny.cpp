@@ -95,7 +95,7 @@ static bool ipp_Canny(const Mat& src , const Mat& dx_, const Mat& dy_, Mat& dst,
             ippiGetImage(dy_, iwSrcDy);
             ippiGetImage(dst, iwDst);
 
-            CV_INSTRUMENT_FUN_IPP(::ipp::iwiFilterCannyDeriv, &iwSrcDx, &iwSrcDy, &iwDst, norm, low, high);
+            CV_INSTRUMENT_FUN_IPP(::ipp::iwiFilterCannyDeriv, iwSrcDx, iwSrcDy, iwDst, low, high, ::ipp::IwiFilterCannyDerivParams(norm));
         }
         catch (::ipp::IwException ex)
         {
@@ -121,7 +121,7 @@ static bool ipp_Canny(const Mat& src , const Mat& dx_, const Mat& dy_, Mat& dst,
             ippiGetImage(src, iwSrc);
             ippiGetImage(dst, iwDst);
 
-            CV_INSTRUMENT_FUN_IPP(::ipp::iwiFilterCanny, &iwSrc, &iwDst, ippFilterSobel, kernel, norm, low, high, ippBorderRepl);
+            CV_INSTRUMENT_FUN_IPP(::ipp::iwiFilterCanny, iwSrc, iwDst, low, high, ::ipp::IwiFilterCannyParams(ippFilterSobel, kernel, norm), ippBorderRepl);
         }
         catch (::ipp::IwException)
         {
@@ -971,6 +971,9 @@ void Canny( InputArray _src, OutputArray _dst,
     CV_Assert( _src.depth() == CV_8U );
 
     const Size size = _src.size();
+
+    // we don't support inplace parameters in case with RGB/BGR src
+    CV_Assert((_dst.getObj() != _src.getObj() || _src.type() == CV_8UC1) && "Inplace parameters are not supported");
 
     _dst.create(size, CV_8U);
 
